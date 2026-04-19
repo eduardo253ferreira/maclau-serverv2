@@ -692,8 +692,8 @@ app.post('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
         return res.status(400).json({ error: "Telefone deve conter exatamente 9 dígitos numéricos" });
     }
 
-    // 🔒 SEGURANÇA: Gerar palavra-passe forte (12 caracteres)
-    const generatedPassword = crypto.randomBytes(8).toString('hex'); // 16 chars hex
+    // 🔒 SEGURANÇA: Gerar palavra-passe simples (6 dígitos) pois será alterada
+    const generatedPassword = Math.floor(100000 + Math.random() * 900000).toString(); 
     const hashedPwd = bcrypt.hashSync(generatedPassword, 10);
 
     db.run(`INSERT INTO tecnicos (nome, especialidade, telefone, email, password) VALUES (?, ?, ?, ?, ?)`,

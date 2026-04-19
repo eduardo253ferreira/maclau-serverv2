@@ -607,8 +607,9 @@ document.getElementById('form-add-tecnico').addEventListener('submit', async (e)
             body: JSON.stringify(data)
         });
         
-        // Mostrar popup com a password gerada
-        alert(`Técnico adicionado com sucesso!\n\nPASSWORD GERADA: ${responseData.tempPassword}\n\nPor favor, copie esta password e entregue-a ao técnico. Ela não voltará a ser exibida.`);
+        // Mostrar Modal de sucesso com a password gerada
+        document.getElementById('display-temp-password').textContent = responseData.tempPassword;
+        openModal('modal-tech-success');
         
         closeModal('modal-add-tecnico');
         document.getElementById('form-add-tecnico').reset();
@@ -617,6 +618,32 @@ document.getElementById('form-add-tecnico').addEventListener('submit', async (e)
         showNotification(e.message, true);
     }
 });
+
+// Listener para copiar password
+const btnCopyPwd = document.getElementById('btn-copy-password');
+if (btnCopyPwd) {
+    btnCopyPwd.addEventListener('click', () => {
+        const pwd = document.getElementById('display-temp-password').textContent;
+        navigator.clipboard.writeText(pwd).then(() => {
+            const icon = btnCopyPwd.querySelector('i');
+            icon.className = 'ph ph-check';
+            showNotification('Password copiada para a área de transferência!');
+            setTimeout(() => {
+                icon.className = 'ph ph-copy';
+            }, 2000);
+        }).catch(err => {
+            showNotification('Erro ao copiar password', true);
+        });
+    });
+}
+
+// Fechar modal de sucesso do técnico
+const btnTechSuccessOk = document.getElementById('btn-tech-success-ok');
+if (btnTechSuccessOk) {
+    btnTechSuccessOk.addEventListener('click', () => {
+        closeModal('modal-tech-success');
+    });
+}
 
 document.getElementById('form-edit-tecnico').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -889,6 +916,34 @@ window.onload = async () => {
     // Iniciar Auto-Refresh se estivermos no Dashboard
     startAutoRefresh();
     updateRefreshStatus();
+
+    // Toggle Sidebar Mobile
+    const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+    if (btnToggleSidebar) {
+        btnToggleSidebar.addEventListener('click', () => {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.classList.toggle('active');
+        });
+    }
+
+    // Fechar Sidebar Mobile
+    const btnCloseSidebar = document.getElementById('btn-close-sidebar');
+    if (btnCloseSidebar) {
+        btnCloseSidebar.addEventListener('click', () => {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) sidebar.classList.remove('active');
+        });
+    }
+
+    // Fechar sidebar ao clicar num link (mobile)
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                if (sidebar) sidebar.classList.remove('active');
+            }
+        });
+    });
 };
 
 // Fechar modals em background click

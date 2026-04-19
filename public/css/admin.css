@@ -111,6 +111,15 @@ body {
     box-shadow: 0 4px 12px rgba(45, 90, 39, 0.25);
 }
 
+.btn-close-sidebar {
+    display: none;
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
 /* Main Content */
 .content-area {
     flex: 1;
@@ -631,6 +640,167 @@ body {
 .btn-resolvida:hover {
     background-color: #059669;
     transform: translateY(-1px);
+}
+
+/* Mobile Header */
+.mobile-header {
+    display: none;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    width: 100%;
+    z-index: 1001;
+}
+
+.btn-menu {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.mobile-logo {
+    height: 30px;
+}
+
+@media (max-width: 768px) {
+    body, .app-container {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+    }
+
+    .mobile-header {
+        display: flex;
+        position: sticky;
+        top: 0;
+    }
+
+    .sidebar {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        bottom: 0;
+        z-index: 2000;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        height: 100vh;
+    }
+
+    .sidebar.active {
+        left: 0;
+        box-shadow: 0 0 50px rgba(0,0,0,0.3);
+    }
+
+    .btn-close-sidebar {
+        display: block;
+        position: absolute;
+        top: 20px;
+        right: 20px;
+    }
+
+    .logo-container {
+        justify-content: flex-start;
+        padding-right: 60px;
+        position: relative;
+    }
+
+    .sidebar-nav {
+        padding: 10px;
+    }
+
+    .content-area {
+        padding: 20px 15px;
+        width: 100%;
+        overflow-y: visible;
+    }
+
+    .view-header {
+        margin-bottom: 25px;
+    }
+
+    .flex-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .view-header h1 {
+        font-size: 24px;
+    }
+
+    .board-container {
+        gap: 20px;
+    }
+
+    .board-column {
+        padding: 15px;
+    }
+
+    .filter-select {
+        min-width: 100%;
+    }
+
+    .table-container {
+        border-radius: 12px;
+        margin-left: -5px;
+        margin-right: -5px;
+        width: calc(100% + 10px);
+        overflow-x: auto;
+    }
+
+    .data-table th, .data-table td {
+        padding: 12px 15px;
+        font-size: 13px;
+    }
+
+    /* Modal Mobile Adjustments */
+    .modal-content {
+        padding: 25px 20px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-content h2 {
+        font-size: 20px;
+        margin-bottom: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    /* Kanban Horizontal Scroll on Mobile */
+    .cards-wrapper {
+        padding: 5px 0 15px 0;
+    }
+
+    .repair-item {
+        padding: 15px;
+    }
+
+    .repair-actions {
+        justify-content: stretch;
+    }
+
+    .btn-status {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Selects and inputs should be full width on mobile */
+    .form-group input, .form-group select {
+        font-size: 16px; /* Prevent zooming on iOS */
+    }
+
+    .filter-select {
+        width: 100%;
+        min-width: 0;
+    }
 }
 
 @media print {

@@ -272,4 +272,32 @@ window.onload = () => {
 
     const histFilter = document.getElementById('filter-hist-cliente');
     if (histFilter) histFilter.addEventListener('change', renderHistorico);
+
+    // Toggle Sidebar Mobile
+    const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+    if (btnToggleSidebar) {
+        btnToggleSidebar.addEventListener('click', () => {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.classList.toggle('active');
+        });
+    }
+
+    // Fechar Sidebar Mobile
+    const btnCloseSidebar = document.getElementById('btn-close-sidebar');
+    if (btnCloseSidebar) {
+        btnCloseSidebar.addEventListener('click', () => {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) sidebar.classList.remove('active');
+        });
+    }
+
+    // Fechar sidebar ao clicar num link (mobile)
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                if (sidebar) sidebar.classList.remove('active');
+            }
+        });
+    });
 };

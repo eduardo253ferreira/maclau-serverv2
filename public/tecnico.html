@@ -13,10 +13,21 @@
     <div id="notification" class="notification hidden"></div>
 
     <div class="app-container">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo-container">
                 <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
             </div>
             <nav class="sidebar-nav">
                 <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
