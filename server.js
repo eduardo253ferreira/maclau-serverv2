@@ -1,4 +1,5 @@
 require('dotenv').config();
+process.env.TZ = 'Europe/Lisbon';
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const qrcode = require('qrcode');
@@ -10,6 +11,7 @@ const bcrypt = require('bcrypt');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,10 +70,12 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Permitir requests sem origin (apps mobile, Postman, etc)
+        // Permitir requests sem origin (apps mobile, etc) ou do próprio host
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.includes(origin)) {
+        const isLocalHost = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.') || origin.includes('10.');
+        
+        if (allowedOrigins.includes(origin) || isLocalHost) {
             callback(null, true);
         } else {
             securityLog('CORS_BLOCKED', { origin });
@@ -256,6 +260,59 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
         });
     }
 });
+
+// --- Configuração Nodemailer ---
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
+
+// Helper para enviar e-mail de atribuição
+async function sendAssignmentEmail(tecnicoEmail, tecnicoNome, machineNome, clientNome) {
+    if (!process.env.SMTP_HOST || !tecnicoEmail) return;
+
+    const mailOptions = {
+        from: process.env.EMAIL_FROM || 'Maclau <noreply@maclau.pt>',
+        to: tecnicoEmail,
+        subject: `Nova Avaria Atribuída: ${machineNome}`,
+        html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <img src="cid:logo" alt="Maclau Logo" style="max-width: 150px; height: auto;">
+                </div>
+                <h1 style="color: #2D5A27; font-size: 24px; margin-bottom: 20px;">Olá, ${tecnicoNome}!</h1>
+                <p style="font-size: 16px; color: #64748B; margin-bottom: 24px;">Foi-lhe atribuída uma nova tarefa de manutenção.</p>
+                
+                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                    <p style="margin: 0 0 10px 0;"><strong>Cliente/Lavandaria:</strong> ${clientNome}</p>
+                    <p style="margin: 0;"><strong>Máquina:</strong> ${machineNome}</p>
+                </div>
+                
+                <p style="font-size: 14px; color: #64748B;">Por favor, aceda ao seu portal para começar a reparação.</p>
+                <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 12px; color: #94a3b8;">
+                    Este é um e-mail automático. Não responda a esta mensagem.
+                </div>
+            </div>
+        `,
+        attachments: [{
+            filename: 'logo.png',
+            path: path.join(__dirname, 'public', 'img', 'logo.png'),
+            cid: 'logo' // mesmo valor que em src="cid:logo"
+        }]
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL] Notificação enviada para: ${tecnicoEmail}`);
+    } catch (error) {
+        console.error('[EMAIL ERROR]', error);
+    }
+}
 
 // 🔒 SEGURANÇA: Graceful shutdown
 process.on('SIGTERM', () => {
@@ -459,7 +516,7 @@ app.delete('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT m.id, m.nome, m.uuid, m.data_criacao, c.nome as cliente_nome, c.id as cliente_id 
+        SELECT m.id, m.nome, m.uuid, strftime('%Y-%m-%dT%H:%M:%SZ', m.data_criacao) as data_criacao, c.nome as cliente_nome, c.id as cliente_id 
         FROM maquinas m 
         LEFT JOIN clientes c ON m.cliente_id = c.id
         ORDER BY m.id DESC
@@ -522,7 +579,7 @@ app.get('/api/maquinas/:uuid/qrcode', authenticateJWT, isAdmin, async (req, res)
     }
 
     const host = req.get('host');
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const protocol = req.protocol; // 🔒 Usa o mesmo protocolo do pedido atual
     const reportUrl = `${protocol}://${host}/report.html?machine=${uuid}`;
 
     try {
@@ -548,7 +605,7 @@ app.post('/api/maquinas/gerar-qrcode', authenticateJWT, isAdmin, async (req, res
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
 
         const host = req.get('host');
-        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+        const protocol = req.protocol;
         const url = `${protocol}://${host}/report.html?machine=${maquina_id}`;
 
         try {
@@ -562,7 +619,10 @@ app.post('/api/maquinas/gerar-qrcode', authenticateJWT, isAdmin, async (req, res
 
 app.get('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.data_hora, a.data_hora_fim, a.tecnico_id,
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
+               a.tecnico_id,
                m.nome as maquina_nome, c.nome as cliente_nome, t.nome as tecnico_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
@@ -595,14 +655,33 @@ app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
     }
 
     // Verificar se o técnico existe
-    db.get(`SELECT id FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tecnico) => {
+    db.get(`SELECT id, nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tecnico) => {
         if (err) return handleDBError(res, err);
         if (!tecnico) return res.status(404).json({ error: "Técnico não encontrado" });
 
-        db.run(`UPDATE avarias SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
+        // Buscar detalhes da avaria para o e-mail
+        const avariaQuery = `
+            SELECT m.nome as maquina_nome, c.nome as cliente_nome
+            FROM avarias a
+            LEFT JOIN maquinas m ON a.maquina_id = m.uuid
+            LEFT JOIN clientes c ON m.cliente_id = c.id
+            WHERE a.id = ?
+        `;
+
+        db.get(avariaQuery, [id], (err, avaria) => {
             if (err) return handleDBError(res, err);
-            securityLog('AVARIA_ATRIBUIDA', { avaria_id: id, tecnico_id });
-            res.json({ message: "Técnico atribuído com sucesso", id, tecnico_id });
+
+            db.run(`UPDATE avarias SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
+                if (err) return handleDBError(res, err);
+                securityLog('AVARIA_ATRIBUIDA', { avaria_id: id, tecnico_id });
+                
+                // Enviar notificação por e-mail
+                if (tecnico.email && avaria) {
+                    sendAssignmentEmail(tecnico.email, tecnico.nome, avaria.maquina_nome, avaria.cliente_nome);
+                }
+
+                res.json({ message: "Técnico atribuído com sucesso", id, tecnico_id });
+            });
         });
     });
 });
@@ -631,7 +710,9 @@ app.put('/api/avarias/:id/status', authenticateJWT, isAdminOrTecnico, (req, res)
 
 app.get('/api/estatisticas/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.tipo_avaria, a.data_hora_fim, a.tecnico_id, t.nome as tecnico_nome
+        SELECT a.id, a.tipo_avaria, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
+               a.tecnico_id, t.nome as tecnico_nome
         FROM avarias a
         LEFT JOIN tecnicos t ON a.tecnico_id = t.id
         WHERE a.estado = 'resolvida' AND a.data_hora_fim IS NOT NULL
@@ -645,7 +726,11 @@ app.get('/api/estatisticas/avarias', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/historico/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.tipo_avaria, a.estado, a.data_hora, a.data_hora_inicio, a.data_hora_fim, a.tecnico_id,
+        SELECT a.id, a.tipo_avaria, a.estado, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
+               a.tecnico_id,
                m.nome as maquina_nome, m.uuid as maquina_uuid, m.cliente_id,
                c.nome as cliente_nome, t.nome as tecnico_nome
         FROM avarias a
@@ -764,7 +849,8 @@ app.delete('/api/tecnicos/:id', authenticateJWT, isAdmin, (req, res) => {
 app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.data_hora,
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora,
                m.nome as maquina_nome, c.nome as cliente_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
@@ -781,7 +867,10 @@ app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
 app.get('/api/tecnico/historico', authenticateJWT, isTecnico, (req, res) => {
     const techId = req.user.id;
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.data_hora, a.data_hora_inicio, a.data_hora_fim,
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim,
                m.nome as maquina_nome, c.nome as cliente_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
