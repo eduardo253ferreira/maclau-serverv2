@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Portal do Técnico</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css"> <!-- Reusing admin styles for consistency -->
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
+                <button class="nav-btn" data-target="historico">Histórico de Serviços</button>
+                <button class="nav-btn" data-target="perfil">Perfil</button>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); box-shadow:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ph ph-sign-out" style="font-size:18px;"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view">
+                <header class="view-header">
+                    <div>
+                        <h1 id="tech-name-display">Olá!</h1>
+                        <p id="tech-stats">A carregar as suas tarefas...</p>
+                    </div>
+                </header>
+
+                <div class="repairs-list" id="repairs-container">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+
+            <!-- Histórico View -->
+            <section id="view-historico" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Histórico de Serviços</h1>
+                        <p>Aqui encontra todas as avarias que já solucionou.</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-hist-cliente" class="filter-label">Filtrar Cliente:</label>
+                        <select id="filter-hist-cliente" class="filter-select">
+                            <option value="">Todos / Pesquisar Cliente</option>
+                        </select>
+                    </div>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Lavandaria</th>
+                                <th>Máquina</th>
+                                <th>Tempo Gasto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-historico-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Perfil View -->
+            <section id="view-perfil" class="view hidden">
+                <header class="view-header">
+                    <div>
+                        <h1>O Meu Perfil</h1>
+                        <p>Faça a gestão da sua segurança e das suas credenciais de acesso.</p>
+                    </div>
+                </header>
+                
+                <div style="max-width: 440px;">
+                    <div class="modal-content" style="position: static; box-shadow: var(--shadow-sm); border: 1px solid var(--border); width: 100%;">
+                        <h2 style="margin-bottom: 20px;">Mudar Palavra-Passe</h2>
+                        <form id="form-change-password">
+                            <div class="form-group">
+                                <label>Palavra-Passe Atual</label>
+                                <input type="password" id="pwd-old" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Nova Palavra-Passe</label>
+                                <input type="password" id="pwd-new" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Confirmar Nova Palavra-Passe</label>
+                                <input type="password" id="pwd-confirm" required>
+                            </div>
+                            <button type="submit" class="btn-primary w-100">Atualizar Password</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/js/tecnico.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Reportar Avaria</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/report.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+</head>
+<body>
+    <div class="header">
+        <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        <p>Assistência Técnica Especializada</p>
+    </div>
+
+    <main class="container" id="main-content">
+        <!-- Loader inicial -->
+        <div id="loader" class="text-center">A carregar informações da máquina...</div>
+        
+        <!-- Conteúdo principal, escondido por defeito -->
+        <div id="report-view" class="hidden">
+            <div class="machine-card">
+                <h3>Máquina Identificada:</h3>
+                <h2 id="machine-name">---</h2>
+            </div>
+            
+            <h4>Selecione o tipo de avaria:</h4>
+            
+            <div class="btn-grid">
+                <!-- 1: Elétrica, 3: Mecânica, 2: Desconhecida -->
+                <button class="btn-avaria warning" data-tipo="1">
+                    <span class="icon">⚡</span>
+                    Avaria Elétrica
+                </button>
+                <button class="btn-avaria danger" data-tipo="3">
+                    <span class="icon">⚙️</span>
+                    Avaria Mecânica
+                </button>
+                <button class="btn-avaria secondary" data-tipo="2">
+                    <span class="icon">❓</span>
+                    Avaria Desconhecida
+                </button>
+            </div>
+        </div>
+
+        <!-- Tela de Sucesso -->
+        <div id="success-view" class="hidden text-center success-box">
+            <span class="icon-big">✅</span>
+            <h2>Avaria Reportada!</h2>
+            <p>A Maclau foi notificada e resolveremos o problema com a maior brevidade.</p>
+        </div>
+
+        <!-- Tela de Erro -->
+        <div id="error-view" class="hidden text-center error-box">
+            <span class="icon-big">❌</span>
+            <h2>Erro na Leitura</h2>
+            <p id="error-message">O código da máquina é inválido ou já não existe.</p>
+        </div>
+    </main>
+
+    <script src="js/report.js"></script>
+</body>
+</html>

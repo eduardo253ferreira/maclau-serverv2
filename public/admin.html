@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Notificação global -->
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="dashboard">
+                    <i class="ph ph-gauge"></i> Dashboard (Avarias)
+                </button>
+                <button class="nav-btn" data-target="historico">
+                    <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
+                </button>
+                <button class="nav-btn" data-target="estatisticas">
+                    <i class="ph ph-chart-line-up"></i> Estatísticas
+                </button>
+                <button class="nav-btn" data-target="clientes">
+                    <i class="ph ph-users"></i> Gestão de Clientes
+                </button>
+                <button class="nav-btn" data-target="maquinas">
+                    <i class="ph ph-monitor"></i> Gestão de Máquinas
+                </button>
+                <button class="nav-btn" data-target="tecnicos">
+                    <i class="ph ph-wrench"></i> Gestão de Técnicos
+                </button>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100" style="background:var(--danger); box-shadow:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ph ph-sign-out" style="font-size:18px;"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Avarias Reportadas</h1>
+                        <p>Acompanhe e gira o estado das avarias nas máquinas.</p>
+                        <div id="refresh-status" style="font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; margin-top: 4px; opacity: 0.8;">
+                            <span style="width: 6px; height: 6px; background: #10b981; border-radius: 50%;"></span>
+                            Sincronizado agora
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-tech-dashboard" class="filter-label">Filtrar Técnico:</label>
+                        <select id="filter-tech-dashboard" class="filter-select">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </header>
+                <div class="board-container">
+                    <!-- Board Columns -->
+                    <!-- Pendentes -->
+                    <div class="board-column" id="col-pendente">
+                        <div class="column-header">
+                            <h3><span class="status-dot red"></span>Pendentes</h3>
+                            <button class="btn-toggle-col" data-col="col-pendente">
+                                <i class="ph ph-caret-up"></i>
+                            </button>
+                        </div>
+                        <div class="cards-wrapper"></div>
+                    </div>
+                    <!-- Em Resolução -->
+                    <div class="board-column" id="col-resolucao">
+                        <div class="column-header">
+                            <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                            <button class="btn-toggle-col" data-col="col-resolucao">
+                                <i class="ph ph-caret-up"></i>
+                            </button>
+                        </div>
+                        <div class="cards-wrapper"></div>
+                    </div>
+                    <!-- Resolvidas -->
+                    <div class="board-column" id="col-resolvida">
+                        <div class="column-header">
+                            <h3><span class="status-dot green"></span>Resolvidas</h3>
+                            <div style="display:flex; gap: 8px; align-items:center;">
+                                <input type="date" id="filter-date-start" style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;" title="De">
+                                <span style="font-size:12px;">Até</span>
+                                <input type="date" id="filter-date-end" style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;" title="Até">
+                                <button class="btn-toggle-col" data-col="col-resolvida">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="cards-wrapper"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Estatísticas View -->
+            <section id="view-estatisticas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Estatísticas</h1>
+                        <p>Métricas das avarias resolvidas.</p>
+                    </div>
+                </header>
+                
+                <div style="background:var(--surface-color); padding:20px; border-radius:12px; margin-bottom:20px; display:flex; gap:20px; align-items:center;">
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Agrupar por</label>
+                        <select id="stats-agrupamento" style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="dia">Dia</option>
+                            <option value="semana">Semana</option>
+                            <option value="mes">Mês</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Filtrar Técnico</label>
+                        <select id="stats-tecnico" style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </div>
+
+                <div style="background:var(--surface-color); padding:20px; border-radius:12px; position: relative; height: 400px; width: 100%;">
+                    <canvas id="statsChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Histórico View -->
+            <section id="view-historico" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Histórico de Avarias</h1>
+                        <p>Registo de todas as intervenções concluídas.</p>
+                    </div>
+                </header>
+                
+                <div style="background:var(--surface-color); padding:20px; border-radius:12px; margin-bottom:20px; display:flex; gap:20px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; flex:1;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Lavandaria</label>
+                        <select id="hist-cliente" style="padding:8px; width:100%; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todas</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0; flex:1;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Máquina</label>
+                        <select id="hist-maquina" style="padding:8px; width:100%; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todas (Selecione Lavandaria primeiro)</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0; flex:1;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Técnico</label>
+                        <select id="hist-tecnico" style="padding:8px; width:100%; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data Resolução</th>
+                                <th>Técnico</th>
+                                <th>Lavandaria</th>
+                                <th>Máquina</th>
+                                <th>Tempo de Resolução</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-historico-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Clientes View -->
+            <section id="view-clientes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Clientes</h1>
+                        <p>Lista de lavandarias.</p>
+                    </div>
+                    <button id="btn-open-add-client" class="btn-primary">+ Novo Cliente</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Email</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-clientes-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Máquinas View -->
+            <section id="view-maquinas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Máquinas</h1>
+                        <p>Atribua máquinas a clientes e gere QR Codes.</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-cliente-maquinas" class="filter-label">Filtrar Cliente:</label>
+                        <select id="filter-cliente-maquinas" class="filter-select">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <button id="btn-open-add-maquina" class="btn-primary">+ Nova Máquina</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Máquina</th>
+                                <th>Cliente</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-maquinas-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Técnicos View -->
+            <section id="view-tecnicos" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Técnicos</h1>
+                        <p>Gira a sua equipa de manutenção.</p>
+                    </div>
+                    <button id="btn-open-add-tecnico" class="btn-primary">+ Novo Técnico</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Especialidade</th>
+                                <th>Contacto</th>
+                                <th>Link Portal</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-tecnicos-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div> <!-- .app-container -->
+
+    <!-- Modals -->
+    <!-- Modal Add Cliente -->
+    <div id="modal-add-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-client">&times;</span>
+            <h2>Adicionar Cliente</h2>
+            <form id="form-add-client">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="client-nome" required placeholder="Ex: Lavandaria Central">
+                </div>
+                <div class="form-group">
+                    <label>Telefone (opcional)</label>
+                    <input type="text" id="client-telefone" pattern="[0-9]{9}" title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email (opcional)</label>
+                    <input type="email" id="client-email" placeholder="Ex: email@exemplo.pt">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Maquina -->
+    <div id="modal-add-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-maquina">&times;</span>
+            <h2>Nova Máquina</h2>
+            <form id="form-add-maquina">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="maquina-cliente_id" required>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Identificação / Nome da Máquina *</label>
+                    <input type="text" id="maquina-nome" required placeholder="Ex: Máquina de Lavar Nº 4 - 10kg">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Cliente -->
+    <div id="modal-edit-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-client">&times;</span>
+            <h2>Editar Cliente</h2>
+            <form id="form-edit-client">
+                <input type="hidden" id="edit-client-id">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="edit-client-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-client-telefone" pattern="[0-9]{9}" title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-client-email">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Maquina -->
+    <div id="modal-edit-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-maquina">&times;</span>
+            <h2>Editar Máquina</h2>
+            <form id="form-edit-maquina">
+                <input type="hidden" id="edit-maquina-id">
+                <div class="form-group">
+                    <label>Selecionar Cliente * (Apenas para visualização)</label>
+                    <select id="edit-maquina-cliente_id" required disabled>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nome da Máquina *</label>
+                    <input type="text" id="edit-maquina-nome" required>
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div id="modal-qrcode" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-qrcode">&times;</span>
+            <img src="img/logo.png" alt="Maclau Logo" id="print-maclau-logo" style="display:none; max-width: 150px; margin: 0 auto 10px auto;">
+            <h3 id="print-client-name" class="print-only-text" style="display:none; margin: 0;"></h3>
+            <h4 id="print-machine-name" class="print-only-text" style="display:none; margin: 5px 0 15px 0; color: #555;"></h4>
+            <h2>QR Code da Máquina</h2>
+            <p>Imprima e cole este código na máquina.</p>
+            <div id="qrcode-image-container" style="margin: 20px 0;"></div>
+            <button id="btn-print-qr" class="btn-primary w-100">Imprimir</button>
+        </div>
+    </div>
+
+    <!-- Modal Status Avaria -->
+    <div id="modal-status-avaria" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-status-avaria">&times;</span>
+            <h2>Atualizar Estado da Avaria</h2>
+            <p>Selecione o novo estado da avaria para esta máquina.</p>
+            <form id="form-status-avaria">
+                <input type="hidden" id="status-avaria-id">
+                <div class="form-group">
+                    <label>Estado da Avaria</label>
+                    <select id="status-avaria-select" required>
+                        <option value="pendente">Pendente</option>
+                        <option value="em resolução">Em Resolução</option>
+                        <option value="resolvida">Resolvida</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar Estado</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Atribuir Técnico -->
+    <div id="modal-atribuir-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-atribuir-tecnico">&times;</span>
+            <h2>Atribuir Técnico</h2>
+            <p>Selecione o técnico responsável por esta avaria.</p>
+            <form id="form-atribuir-tecnico">
+                <input type="hidden" id="atribuir-avaria-id">
+                <div class="form-group">
+                    <label>Técnico</label>
+                    <select id="atribuir-tecnico-select" required>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Confirmar Atribuição</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Técnico -->
+    <div id="modal-add-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-tecnico">&times;</span>
+            <h2>Adicionar Técnico</h2>
+            <form id="form-add-tecnico">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="tecnico-nome" required placeholder="Ex: João Silva">
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="tecnico-especialidade" placeholder="Ex: Elétrica">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="tecnico-telefone" pattern="[0-9]{9}" title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" id="tecnico-email" required placeholder="Ex: joao@maclau.pt">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Técnico -->
+    <div id="modal-edit-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-tecnico">&times;</span>
+            <h2>Editar Técnico</h2>
+            <form id="form-edit-tecnico">
+                <input type="hidden" id="edit-tecnico-id">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="edit-tecnico-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="edit-tecnico-especialidade">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-tecnico-telefone" pattern="[0-9]{9}" title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-tecnico-email">
+                </div>
+                <div class="form-group">
+                    <label>Palavra-passe (Opcional, deixe em branco para não alterar)</label>
+                    <input type="text" id="edit-tecnico-password" placeholder="Nova palavra-passe">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/admin.js?v=2.2"></script>
+</body>
+</html>
