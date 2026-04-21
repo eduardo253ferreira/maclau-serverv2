@@ -127,10 +127,121 @@ async function updateStatus(id, newStatus) {
         });
         
         if (res.ok) {
-            showNotification(newStatus === 'resolvida' ? "Bom trabalho! Avaria resolvida." : "Reparação iniciada!");
-            loadMyTasks();
+            if (newStatus === 'resolvida') {
+                openRelatorioModal(id, true);
+            } else {
+                showNotification("Reparação iniciada!");
+                loadMyTasks();
+            }
         } else {
             throw new Error("Erro ao atualizar estado.");
+        }
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+// --- Funções de Relatório ---
+
+function openRelatorioModal(id, isStatusChange = false, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '') {
+    document.getElementById('relatorio-avaria-id').value = id;
+    document.getElementById('relatorio-status-change').value = isStatusChange ? '1' : '0';
+    document.getElementById('relatorio-texto').value = currentText || '';
+    document.getElementById('relatorio-pecas').value = currentPecas || ''; 
+    document.getElementById('relatorio-horas').value = currentHoras || ''; 
+    
+    const modalTitle = document.getElementById('modal-relatorio-title');
+    const modalSubtitle = document.getElementById('modal-relatorio-subtitle');
+    const btnSubmit = document.getElementById('btn-submit-report');
+    const btnSave = document.getElementById('btn-save-draft');
+    const warning = document.getElementById('relatorio-warning');
+    const textarea = document.getElementById('relatorio-texto');
+
+    if (isStatusChange) {
+        modalTitle.textContent = "Avaria Resolvida!";
+        modalSubtitle.textContent = "Bom trabalho! Deseja escrever um relatório sobre esta intervenção agora? (Opcional)";
+        btnSubmit.textContent = "Submeter ao Admin";
+        warning.style.display = 'block';
+    } else {
+        modalTitle.textContent = isSubmitted ? "Relatório Submetido" : "Editar Relatório";
+        modalSubtitle.textContent = isSubmitted ? "Este relatório já foi enviado e é definitivo." : "Continue a descrever a sua intervenção.";
+        btnSubmit.textContent = "Submeter ao Admin";
+        warning.style.display = isSubmitted ? 'none' : 'block';
+    }
+
+    if (isSubmitted) {
+        textarea.disabled = true;
+        btnSubmit.style.display = 'none';
+        btnSave.style.display = 'none';
+    } else {
+        textarea.disabled = false;
+        btnSubmit.style.display = 'block';
+        btnSave.style.display = 'block';
+    }
+
+    document.getElementById('modal-relatorio').classList.remove('hidden');
+}
+
+async function saveRelatorioDraft() {
+    const id = document.getElementById('relatorio-avaria-id').value;
+    const relatorio = document.getElementById('relatorio-texto').value;
+    const pecas_substituidas = document.getElementById('relatorio-pecas').value;
+    const horas_raw = document.getElementById('relatorio-horas').value;
+    const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
+    const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+
+    try {
+        const res = await authFetch(`${API_BASE}/tecnico/avarias/${id}/relatorio`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho })
+        });
+        
+        if (res.ok) {
+            showNotification("Rascunho salvo com sucesso.");
+            document.getElementById('modal-relatorio').classList.add('hidden');
+            if (isStatusChange) loadMyTasks();
+            else loadHistorico();
+        } else {
+            const data = await res.json();
+            throw new Error(data.error || "Erro ao salvar rascunho");
+        }
+    } catch (e) {
+        showNotification(e.message, true);
+    }
+}
+
+async function submitRelatorio() {
+    const id = document.getElementById('relatorio-avaria-id').value;
+    const relatorio = document.getElementById('relatorio-texto').value;
+    const pecas_substituidas = document.getElementById('relatorio-pecas').value;
+    const horas_raw = document.getElementById('relatorio-horas').value;
+    const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
+    const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+
+    if (!confirm("Deseja submeter este relatório? Após submeter não poderá fazer mais alterações e o Administrador terá acesso ao mesmo.")) return;
+
+    try {
+        // Primeiro salvamos o texto atual
+        await authFetch(`${API_BASE}/tecnico/avarias/${id}/relatorio`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho })
+        });
+
+        // Depois submetemos
+        const res = await authFetch(`${API_BASE}/tecnico/avarias/${id}/submeter-relatorio`, {
+            method: 'POST'
+        });
+        
+        if (res.ok) {
+            showNotification("Relatório submetido com sucesso!");
+            document.getElementById('modal-relatorio').classList.add('hidden');
+            if (isStatusChange) loadMyTasks();
+            else loadHistorico();
+        } else {
+            const data = await res.json();
+            throw new Error(data.error || "Erro ao submeter");
         }
     } catch (e) {
         showNotification(e.message, true);
@@ -196,18 +307,64 @@ window.renderHistorico = function() {
     }
 
     filteredData.forEach(a => {
-        const timeSpent = formatTimeDifference(a.data_hora_inicio, a.data_hora_fim);
         const dateStr = a.data_hora_fim ? new Date(a.data_hora_fim).toLocaleString('pt-PT') : new Date(a.data_hora).toLocaleString('pt-PT');
         
         const tr = document.createElement('tr');
+        
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td class="col-client"></td>
             <td class="col-machine"></td>
-            <td>${timeSpent}</td>
+            <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
+            <td class="col-report"></td>
         `;
-        tr.querySelector('.col-client').textContent = a.cliente_nome;
-        tr.querySelector('.col-machine').textContent = a.maquina_nome;
+
+        tr.querySelector('.col-client').textContent = a.cliente_nome || '-';
+        tr.querySelector('.col-machine').textContent = a.maquina_nome || '-';
+        
+        const colReport = tr.querySelector('.col-report');
+        colReport.style.display = 'flex';
+        colReport.style.gap = '5px';
+
+        if (a.relatorio_submetido !== 1) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-status';
+            btn.style.padding = '5px 10px';
+            btn.style.fontSize = '12px';
+            btn.style.display = 'flex';
+            btn.style.alignItems = 'center';
+            btn.style.gap = '5px';
+            btn.style.border = 'none';
+            btn.style.borderRadius = '6px';
+            btn.style.cursor = 'pointer';
+            btn.style.fontWeight = '600';
+            
+            btn.style.background = '#fef9c3';
+            btn.style.color = '#854d0e';
+            btn.innerHTML = '<i class="ph ph-pencil-line"></i> Editar';
+            
+            btn.onclick = () => openReportFromHistory(a.id);
+            colReport.appendChild(btn);
+        }
+
+        if (a.relatorio_submetido === 1) {
+            const btnPdf = document.createElement('button');
+            btnPdf.className = 'btn-status';
+            btnPdf.style.padding = '5px 10px';
+            btnPdf.style.fontSize = '12px';
+            btnPdf.style.display = 'flex';
+            btnPdf.style.alignItems = 'center';
+            btnPdf.style.gap = '5px';
+            btnPdf.style.border = 'none';
+            btnPdf.style.borderRadius = '6px';
+            btnPdf.style.cursor = 'pointer';
+            btnPdf.style.fontWeight = '600';
+            btnPdf.style.background = '#dc2626';
+            btnPdf.style.color = '#ffffff';
+            btnPdf.innerHTML = '<i class="ph ph-file-pdf"></i> PDF';
+            btnPdf.onclick = () => viewPDF(a.id);
+            colReport.appendChild(btnPdf);
+        }
         
         tbody.appendChild(tr);
     });
@@ -262,7 +419,6 @@ if (pwdForm) {
     });
 }
 
-// Iniciar
 window.onload = () => {
     showView();
 
@@ -300,4 +456,45 @@ window.onload = () => {
             }
         });
     });
+
+    // Relatorio Listeners
+    const btnSaveDraft = document.getElementById('btn-save-draft');
+    if (btnSaveDraft) btnSaveDraft.addEventListener('click', saveRelatorioDraft);
+    
+    const formRelatorio = document.getElementById('form-relatorio');
+    if (formRelatorio) {
+        formRelatorio.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitRelatorio();
+        });
+    }
+
+    const closeBtns = document.querySelectorAll('.close-btn');
+    closeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modalId = btn.getAttribute('data-modal');
+            if (modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+                // Se era o modal de relatório vindo de uma conclusão, recarrega tarefas
+                if (modalId === 'modal-relatorio' && document.getElementById('relatorio-status-change').value === '1') {
+                    loadMyTasks();
+                }
+            }
+        });
+    });
+};
+
+function escapeJS(str) {
+    if (!str) return '';
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+}
+
+window.openReportFromHistory = function(id) {
+    const avaria = historicoData.find(a => a.id === id);
+    if (!avaria) return;
+    openRelatorioModal(avaria.id, false, avaria.relatorio, avaria.relatorio_submetido === 1, avaria.pecas_substituidas, avaria.horas_trabalho);
+};
+
+window.viewPDF = function(id) {
+    window.open(`/relatorio.html?id=${id}`, '_blank');
 };

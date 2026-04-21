@@ -193,7 +193,8 @@
                                 <th>Técnico</th>
                                 <th>Lavandaria</th>
                                 <th>Máquina</th>
-                                <th>Tempo de Resolução</th>
+                                <th>Horas Trabalho (M)</th>
+                                <th>Relatório</th>
                             </tr>
                         </thead>
                         <tbody id="table-historico-body">
@@ -280,7 +281,6 @@
                                 <th>Nome</th>
                                 <th>Especialidade</th>
                                 <th>Contacto</th>
-                                <th>Link Portal</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
@@ -522,6 +522,16 @@
         </div>
     </div>
 
-    <script src="/js/admin.js?v=2.2"></script>
+    <!-- Modal Visualizar Relatorio -->
+    <div id="modal-view-relatorio" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-relatorio">&times;</span>
+            <h2>Relatório da Intervenção</h2>
+            <div id="view-relatorio-content" style="background:var(--bg-main); padding:20px; border-radius:12px; border:1px solid var(--border-color); white-space:pre-wrap; margin-top:15px; font-size:14px; line-height:1.6;">
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/admin.js?v=3.0"></script>
 </body>
 </html>

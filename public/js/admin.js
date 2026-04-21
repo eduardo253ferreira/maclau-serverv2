@@ -522,18 +522,13 @@ async function loadTecnicos() {
         tbody.innerHTML = '';
         
         tecnicos.forEach(t => {
-            const portalUrl = `${window.location.origin}/tecnico.html?id=${t.id}&name=${encodeURIComponent(t.nome)}`;
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="col-id"></td>
                 <td class="col-nome"></td>
                 <td class="col-esp"></td>
                 <td class="col-contato"></td>
-                <td>
-                    <a href="${portalUrl}" target="_blank" class="btn-icon" title="Abrir Portal" style="text-decoration:none;">
-                        <i class="ph ph-arrow-square-out"></i>
-                    </a>
-                </td>
+
                 <td>
                     <div style="display:flex; gap:8px;">
                         <button class="btn-icon btn-edit" title="Editar">
@@ -806,8 +801,8 @@ async function loadHistorico() {
             if (filtroMaquina && a.maquina_uuid !== filtroMaquina) return;
             if (filtroTecnico && a.tecnico_id != filtroTecnico) return;
 
-            const timeSpent = formatTimeDifference(a.data_hora_inicio, a.data_hora_fim);
             const dataFimExibicao = a.data_hora_fim ? new Date(a.data_hora_fim).toLocaleString('pt-PT') : new Date(a.data_hora).toLocaleString('pt-PT');
+            const reportBtnHtml = a.relatorio ? `` : `<span style="font-size:11px; color:var(--text-secondary);">Sem Relatório</span>`;
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -815,17 +810,45 @@ async function loadHistorico() {
                 <td class="col-tech"></td>
                 <td class="col-client"></td>
                 <td class="col-machine"></td>
-                <td>${timeSpent}</td>
+                <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
+                <td class="col-actions" style="display:flex; gap:5px;">${reportBtnHtml}</td>
             `;
             tr.querySelector('.col-tech').textContent = a.tecnico_nome || '-';
             tr.querySelector('.col-client').textContent = a.cliente_nome || '-';
             tr.querySelector('.col-machine').textContent = a.maquina_nome || '-';
+            
+            if (a.relatorio) {
+                
+                const colActions = tr.querySelector('.col-actions');
+                const btnPdf = document.createElement('button');
+                btnPdf.className = 'btn-status';
+                btnPdf.style.padding = '5px 10px';
+                btnPdf.style.fontSize = '12px';
+                btnPdf.style.display = 'flex';
+                btnPdf.style.alignItems = 'center';
+                btnPdf.style.gap = '5px';
+                btnPdf.style.border = 'none';
+                btnPdf.style.borderRadius = '6px';
+                btnPdf.style.cursor = 'pointer';
+                btnPdf.style.fontWeight = '600';
+                btnPdf.style.background = '#dc2626';
+                btnPdf.style.color = '#ffffff';
+                btnPdf.innerHTML = '<i class="ph ph-file-pdf"></i> PDF';
+                btnPdf.onclick = () => window.open(`/relatorio.html?id=${a.id}`, '_blank');
+                colActions.appendChild(btnPdf);
+            }
             
             tbody.appendChild(tr);
         });
     } catch (e) {
         showNotification("Erro ao carregar histórico: " + e.message, true);
     }
+}
+
+function viewRelatorio(texto) {
+    const content = document.getElementById('view-relatorio-content');
+    content.textContent = texto;
+    openModal('modal-view-relatorio');
 }
 
 // INIT

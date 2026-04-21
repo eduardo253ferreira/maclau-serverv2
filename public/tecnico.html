@@ -78,7 +78,8 @@
                                 <th>Data</th>
                                 <th>Lavandaria</th>
                                 <th>Máquina</th>
-                                <th>Tempo Gasto</th>
+                                <th>Horas (M)</th>
+                                <th>Relatório</th>
                             </tr>
                         </thead>
                         <tbody id="table-historico-body">
@@ -121,6 +122,38 @@
         </main>
     </div>
 
-    <script src="/js/tecnico.js"></script>
+    <!-- Modal Relatorio -->
+    <div id="modal-relatorio" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-relatorio">&times;</span>
+            <h2 id="modal-relatorio-title">Relatório de Intervenção</h2>
+            <p id="modal-relatorio-subtitle">Descreva o trabalho realizado nesta máquina.</p>
+            <form id="form-relatorio">
+                <input type="hidden" id="relatorio-avaria-id">
+                <input type="hidden" id="relatorio-status-change"> <!-- se for 'resolvida' -->
+                <div class="form-group">
+                    <label>Relato do Técnico (Opcional)</label>
+                    <textarea id="relatorio-texto" rows="4" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; resize:vertical;" placeholder="Ex: Substituição de correia do tambor e lubrificação..."></textarea>
+                </div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Peças Substituídas (Opcional)</label>
+                    <textarea id="relatorio-pecas" rows="2" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; resize:vertical;" placeholder="Ex: 1x Correia Mod. X, 2x Parafusos..."></textarea>
+                </div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Tempo de Trabalho (Horas)</label>
+                    <input type="number" id="relatorio-horas" step="0.1" min="0" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit;" placeholder="Ex: 1.5">
+                </div>
+                <div style="display:flex; gap:12px; margin-top:20px;">
+                    <button type="button" id="btn-save-draft" class="btn-primary" style="flex:1; background:var(--accent-light); color:var(--accent); box-shadow:none;">Guardar Rascunho</button>
+                    <button type="submit" id="btn-submit-report" class="btn-primary" style="flex:1;">Submeter ao Admin</button>
+                </div>
+                <p id="relatorio-warning" style="font-size:11px; color:var(--danger); margin-top:12px; display:none;">
+                    <i class="ph ph-warning-circle"></i> Atenção: Após submeter, o relatório torna-se definitivo.
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/tecnico.js?v=3.0"></script>
 </body>
 </html>
