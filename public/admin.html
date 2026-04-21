@@ -72,12 +72,14 @@
                             Sincronizado agora
                         </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap: 10px;">
-                        <label for="filter-tech-dashboard" class="filter-label">Filtrar Técnico:</label>
-                        <select id="filter-tech-dashboard" class="filter-select">
-                            <option value="">Todos</option>
-                            <!-- Populated by JS -->
-                        </select>
+                    <div class="header-actions">
+                        <div class="filter-group">
+                            <label for="filter-tech-dashboard" class="filter-label">Filtrar Técnico:</label>
+                            <select id="filter-tech-dashboard" class="filter-select">
+                                <option value="">Todos</option>
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
                     </div>
                 </header>
                 <div class="board-container">
@@ -86,9 +88,15 @@
                     <div class="board-column" id="col-pendente">
                         <div class="column-header">
                             <h3><span class="status-dot red"></span>Pendentes</h3>
-                            <button class="btn-toggle-col" data-col="col-pendente">
-                                <i class="ph ph-caret-up"></i>
-                            </button>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <button id="btn-open-report-avaria" class="btn-report-avaria" style="padding: 6px 14px; font-size: 13px;">
+                                    <i class="ph ph-warning-circle"></i>
+                                    <span>Reportar</span>
+                                </button>
+                                <button class="btn-toggle-col" data-col="col-pendente">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="cards-wrapper"></div>
                     </div>
@@ -522,13 +530,48 @@
         </div>
     </div>
 
-    <!-- Modal Visualizar Relatorio -->
-    <div id="modal-view-relatorio" class="modal hidden">
+    <!-- Modal Reportar Avaria (Admin Manual) -->
+    <div id="modal-report-avaria" class="modal hidden">
         <div class="modal-content">
-            <span class="close-btn" data-modal="modal-view-relatorio">&times;</span>
-            <h2>Relatório da Intervenção</h2>
-            <div id="view-relatorio-content" style="background:var(--bg-main); padding:20px; border-radius:12px; border:1px solid var(--border-color); white-space:pre-wrap; margin-top:15px; font-size:14px; line-height:1.6;">
-            </div>
+            <span class="close-btn" data-modal="modal-report-avaria">&times;</span>
+            <h2>Reportar Avaria</h2>
+            <p>Utilize este formulário quando um cliente ligar a reportar um problema.</p>
+            <form id="form-report-avaria">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-avaria-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Selecionar Máquina *</label>
+                    <select id="report-avaria-maquina" required disabled>
+                        <option value="">Selecione o Cliente primeiro</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Avaria *</label>
+                    <select id="report-avaria-tipo" required>
+                        <option value="1">⚡ Avaria Elétrica</option>
+                        <option value="3">⚙️ Avaria Mecânica</option>
+                        <option value="2">❓ Avaria Desconhecida</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas / Descrição do Problema</label>
+                    <textarea id="report-avaria-notas" rows="3" placeholder="Ex: O cliente diz que a máquina faz um barulho estranho ao centrifugar..." style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico (Opcional)</label>
+                    <select id="report-avaria-tecnico">
+                        <option value="">-- Não Atribuir Agora --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Reporte</button>
+            </form>
         </div>
     </div>
 

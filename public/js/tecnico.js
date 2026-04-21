@@ -85,8 +85,16 @@ async function loadMyTasks() {
             div.className = 'repair-item';
             
             let tipoStr = task.tipo_avaria === 1 ? 'ELÉTRICA' : (task.tipo_avaria === 3 ? 'MECÂNICA' : 'DESCONHECIDA');
-            let statusLabel = task.estado === 'pendente' ? 'Aguardando Início' : 'Em Resolução';
-            let statusColor = task.estado === 'pendente' ? 'var(--danger)' : 'var(--warning)';
+            let statusLabel = 'Em Resolução';
+            let statusColor = 'var(--warning)';
+            if (task.estado === 'pendente') {
+                statusLabel = 'Aguardando Início';
+                statusColor = 'var(--danger)';
+            } else if (task.estado === 'pausada') {
+                const pDate = task.data_hora_pausa ? new Date(task.data_hora_pausa) : new Date();
+                statusLabel = `Pausado às ${pDate.getHours().toString().padStart(2, '0')}:${pDate.getMinutes().toString().padStart(2, '0')}h ${pDate.toLocaleDateString('pt-PT')}`;
+                statusColor = '#ca8a04'; // Cor laranja escuro/amarelo
+            }
 
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:10px;">
@@ -96,6 +104,7 @@ async function loadMyTasks() {
                 <h3 class="task-machine-name" style="margin-bottom:5px;"></h3>
                 <p class="task-client-name" style="font-size:14px; color:var(--text-secondary);"></p>
                 <div style="font-size:12px; color:var(--text-secondary); margin-top:10px;">Reportada em: ${new Date(task.data_hora).toLocaleString('pt-PT')}</div>
+                ${task.notas ? `<div style="margin-top:10px; padding:10px; background:var(--surface-color); border-radius:6px; font-size:13px; border-left:3px solid var(--accent);"><strong style="color:var(--text-main);">Notas do Admin:</strong><br>${escapeHTML(task.notas)}</div>` : ''}
                 
                 <div class="repair-actions">
                 </div>
@@ -105,10 +114,27 @@ async function loadMyTasks() {
             div.querySelector('.task-client-name').textContent = task.cliente_nome;
 
             const actionsDiv = div.querySelector('.repair-actions');
+            actionsDiv.style.gap = '10px';
+
+            if (task.estado === 'em resolução') {
+                const btnPausar = document.createElement('button');
+                btnPausar.className = 'btn-status';
+                btnPausar.style.backgroundColor = '#e2e8f0';
+                btnPausar.style.color = '#475569';
+                btnPausar.innerHTML = '<i class="ph ph-pause"></i> Pausar Reparação';
+                btnPausar.onclick = () => {
+                    document.getElementById('pausar-avaria-id').value = task.id;
+                    document.getElementById('pausar-motivo').value = '';
+                    document.getElementById('modal-pausar').classList.remove('hidden');
+                };
+                actionsDiv.appendChild(btnPausar);
+            }
+
             const btn = document.createElement('button');
-            btn.className = 'btn-status ' + (task.estado === 'pendente' ? 'btn-resolucao' : 'btn-resolvida');
-            btn.textContent = task.estado === 'pendente' ? 'Começar Reparação' : 'Marcar como Resolvida';
-            btn.onclick = () => updateStatus(task.id, task.estado === 'pendente' ? 'em resolução' : 'resolvida');
+            const ehAguardando = (task.estado === 'pendente' || task.estado === 'pausada');
+            btn.className = 'btn-status ' + (ehAguardando ? 'btn-resolucao' : 'btn-resolvida');
+            btn.innerHTML = ehAguardando ? '<i class="ph ph-play"></i> ' + (task.estado === 'pausada' ? 'Retomar Reparação' : 'Começar Reparação') : '<i class="ph ph-check"></i> Marcar como Resolvida';
+            btn.onclick = () => updateStatus(task.id, ehAguardando ? 'em resolução' : 'resolvida', task.relatorio);
             actionsDiv.appendChild(btn);
 
             container.appendChild(div);
@@ -118,7 +144,7 @@ async function loadMyTasks() {
     }
 }
 
-async function updateStatus(id, newStatus) {
+async function updateStatus(id, newStatus, currentText = '') {
     try {
         const res = await authFetch(`${API_BASE}/avarias/${id}/status`, {
             method: 'PUT',
@@ -128,7 +154,7 @@ async function updateStatus(id, newStatus) {
         
         if (res.ok) {
             if (newStatus === 'resolvida') {
-                openRelatorioModal(id, true);
+                openRelatorioModal(id, true, currentText);
             } else {
                 showNotification("Reparação iniciada!");
                 loadMyTasks();
@@ -143,12 +169,22 @@ async function updateStatus(id, newStatus) {
 
 // --- Funções de Relatório ---
 
-function openRelatorioModal(id, isStatusChange = false, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '') {
+function openRelatorioModal(id, isStatusChange = false, currentText = '', isSubmitted = false, currentPecas = '', currentHoras = '', currentSignature = '') {
     document.getElementById('relatorio-avaria-id').value = id;
     document.getElementById('relatorio-status-change').value = isStatusChange ? '1' : '0';
     document.getElementById('relatorio-texto').value = currentText || '';
     document.getElementById('relatorio-pecas').value = currentPecas || ''; 
     document.getElementById('relatorio-horas').value = currentHoras || ''; 
+    
+    // Clear and restore signature
+    clearSignature();
+    if (currentSignature) {
+        const img = new Image();
+        img.onload = () => {
+            sigCtx.drawImage(img, 0, 0);
+        };
+        img.src = currentSignature;
+    }
     
     const modalTitle = document.getElementById('modal-relatorio-title');
     const modalSubtitle = document.getElementById('modal-relatorio-subtitle');
@@ -189,12 +225,13 @@ async function saveRelatorioDraft() {
     const horas_raw = document.getElementById('relatorio-horas').value;
     const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
     const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+    const assinatura_cliente = isCanvasBlank(sigCanvas) ? null : sigCanvas.toDataURL('image/png');
 
     try {
         const res = await authFetch(`${API_BASE}/tecnico/avarias/${id}/relatorio`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho })
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente })
         });
         
         if (res.ok) {
@@ -218,6 +255,7 @@ async function submitRelatorio() {
     const horas_raw = document.getElementById('relatorio-horas').value;
     const horas_trabalho = horas_raw ? horas_raw.replace(',', '.') : '';
     const isStatusChange = document.getElementById('relatorio-status-change').value === '1';
+    const assinatura_cliente = isCanvasBlank() ? null : sigCanvas.toDataURL('image/png');
 
     if (!confirm("Deseja submeter este relatório? Após submeter não poderá fazer mais alterações e o Administrador terá acesso ao mesmo.")) return;
 
@@ -226,7 +264,7 @@ async function submitRelatorio() {
         await authFetch(`${API_BASE}/tecnico/avarias/${id}/relatorio`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho })
+            body: JSON.stringify({ relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente })
         });
 
         // Depois submetemos
@@ -316,15 +354,13 @@ window.renderHistorico = function() {
             <td class="col-client"></td>
             <td class="col-machine"></td>
             <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
-            <td class="col-report"></td>
+            <td class="col-report"><div style="display:flex; gap:5px;"></div></td>
         `;
 
         tr.querySelector('.col-client').textContent = a.cliente_nome || '-';
         tr.querySelector('.col-machine').textContent = a.maquina_nome || '-';
         
-        const colReport = tr.querySelector('.col-report');
-        colReport.style.display = 'flex';
-        colReport.style.gap = '5px';
+        const colReport = tr.querySelector('.col-report div');
 
         if (a.relatorio_submetido !== 1) {
             const btn = document.createElement('button');
@@ -421,6 +457,7 @@ if (pwdForm) {
 
 window.onload = () => {
     showView();
+    initSignaturePad();
 
     // CSP Listeners
     const logoutBtn = document.getElementById('btn-logout');
@@ -469,6 +506,34 @@ window.onload = () => {
         });
     }
 
+    const formPausar = document.getElementById('form-pausar');
+    if (formPausar) {
+        formPausar.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('pausar-avaria-id').value;
+            const motivo = document.getElementById('pausar-motivo').value;
+
+            try {
+                const res = await authFetch(`${API_BASE}/avarias/${id}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ estado: 'pausada', motivo_pausa: motivo })
+                });
+                
+                if (res.ok) {
+                    showNotification("Reparação pausada.");
+                    document.getElementById('modal-pausar').classList.add('hidden');
+                    loadMyTasks();
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || "Erro ao pausar reparação.");
+                }
+            } catch (err) {
+                showNotification(err.message, true);
+            }
+        });
+    }
+
     const closeBtns = document.querySelectorAll('.close-btn');
     closeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -492,8 +557,87 @@ function escapeJS(str) {
 window.openReportFromHistory = function(id) {
     const avaria = historicoData.find(a => a.id === id);
     if (!avaria) return;
-    openRelatorioModal(avaria.id, false, avaria.relatorio, avaria.relatorio_submetido === 1, avaria.pecas_substituidas, avaria.horas_trabalho);
+    openRelatorioModal(avaria.id, false, avaria.relatorio, avaria.relatorio_submetido === 1, avaria.pecas_substituidas, avaria.horas_trabalho, avaria.assinatura_cliente);
 };
+
+// --- Assinatura Digital ---
+let sigCanvas, sigCtx, isDrawing = false;
+
+function initSignaturePad() {
+    sigCanvas = document.getElementById('signature-pad');
+    if (!sigCanvas) return;
+    sigCtx = sigCanvas.getContext('2d');
+    
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = 'round';
+    sigCtx.strokeStyle = '#000000';
+    
+    sigCanvas.addEventListener('mousedown', startDrawing);
+    sigCanvas.addEventListener('mousemove', draw);
+    sigCanvas.addEventListener('mouseup', stopDrawing);
+    sigCanvas.addEventListener('mouseout', stopDrawing);
+    
+    sigCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+    sigCanvas.addEventListener('touchmove', draw, { passive: false });
+    sigCanvas.addEventListener('touchend', stopDrawing);
+    sigCanvas.addEventListener('touchcancel', stopDrawing);
+    
+    document.getElementById('btn-clear-signature').addEventListener('click', clearSignature);
+}
+
+function getPos(e) {
+    const rect = sigCanvas.getBoundingClientRect();
+    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+    const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
+    
+    const scaleX = sigCanvas.width / (rect.width || 1);
+    const scaleY = sigCanvas.height / (rect.height || 1);
+    
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+function startDrawing(e) {
+    if (document.getElementById('relatorio-texto').disabled) return;
+    if (e.type.includes('touch')) e.preventDefault();
+    isDrawing = true;
+    const pos = getPos(e);
+    sigCtx.beginPath();
+    sigCtx.moveTo(pos.x, pos.y);
+    draw(e);
+}
+
+function draw(e) {
+    if (!isDrawing) return;
+    if (e.type.includes('touch')) e.preventDefault();
+    const pos = getPos(e);
+    
+    sigCtx.lineTo(pos.x, pos.y);
+    sigCtx.stroke();
+    sigCtx.beginPath();
+    sigCtx.moveTo(pos.x, pos.y);
+}
+
+function stopDrawing() {
+    isDrawing = false;
+    sigCtx.beginPath();
+}
+
+function clearSignature() {
+    if (!sigCanvas || !sigCtx) return;
+    if (document.getElementById('relatorio-texto').disabled) return;
+    sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+}
+
+function isCanvasBlank() {
+    if (!sigCanvas || !sigCtx) return true;
+    const blank = document.createElement('canvas');
+    blank.width = sigCanvas.width;
+    blank.height = sigCanvas.height;
+    return sigCanvas.toDataURL() === blank.toDataURL();
+}
 
 window.viewPDF = function(id) {
     window.open(`/relatorio.html?id=${id}`, '_blank');

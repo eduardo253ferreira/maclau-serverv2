@@ -58,7 +58,7 @@ function renderReport(data) {
                 <p style="font-size: 10px; line-height: 1.2;">Manutenção Industrial e Comercial</p>
             </div>
             <div class="report-meta">
-                <h2 style="font-size: 18px;">Relatório de Intervencão</h2>
+                <h2 style="font-size: 18px;">${data.relatorio_submetido === 1 ? 'Relatório de Intervenção' : '<span style="color: #ca8a04;">Relatório (Rascunho)</span>'}</h2>
                 <p>ID: #${data.id.toString().padStart(5, '0')}</p>
                 <p>Data: ${dateStr}</p>
             </div>
@@ -80,6 +80,13 @@ function renderReport(data) {
             </div>
         </div>
 
+        ${data.notas ? `
+        <div class="content-section" style="margin-bottom: 30px;">
+            <h3><i class="ph ph-warning-circle"></i> Notas de Reporte (Admin)</h3>
+            <div class="content-box" style="min-height: 50px;">${data.notas}</div>
+        </div>
+        ` : ''}
+
         <div class="content-section" style="margin-bottom: 30px;">
             <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
             <div class="content-box" style="min-height: 80px;">${data.relatorio || 'Nenhuma descrição detalhada fornecida.'}</div>
@@ -94,10 +101,14 @@ function renderReport(data) {
 
         <footer>
             <div class="signature-block">
+                <div style="height:50px;"></div>
                 <div class="signature-line">Assinatura do Técnico</div>
             </div>
             <div class="signature-block">
-                <div class="signature-line">Assinatura do Cliente</div>
+                ${data.assinatura_cliente 
+                    ? `<img src="${data.assinatura_cliente}" alt="Assinatura do Cliente" style="display:block; margin:0 auto; max-width:200px; max-height:80px;">` 
+                    : `<div style="height:50px;"></div>`}
+                <div class="signature-line"${data.assinatura_cliente ? ' style="margin-top:5px; border-top-color:#94a3b8;"' : ''}>Assinatura do Cliente</div>
             </div>
         </footer>
     `;

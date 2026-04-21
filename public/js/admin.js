@@ -199,14 +199,20 @@ async function loadAvarias() {
             // 1: Eletrica, 2: Desconhecida, 3: Mecanica
             let tipoStr = a.tipo_avaria === 1 ? 'ELÉTRICA' : (a.tipo_avaria === 3 ? 'MECÂNICA' : 'DESCONHECIDA');
             
+            let tagHTML = `<div class="card-type">${tipoStr}</div>`;
+            if (a.estado === 'pausada') {
+                tagHTML += ` <div class="card-type" style="background:#fef08a; color:#854d0e; margin-left:5px;"><i class="ph ph-pause"></i> PAUSADA</div>`;
+            }
+
             card.innerHTML = `
-                <div class="card-type">${tipoStr}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">${tagHTML}</div>
                 <h4 class="card-machine-name"></h4>
                 <p class="card-client-name"></p>
                 <div class="assigned-tech" style="margin-top:10px; font-size:13px; font-weight:600; color:var(--accent);">
                     <span style="color:var(--text-secondary); font-weight:400;">Técnico:</span> <span class="card-tech-name"></span>
                 </div>
                 <div class="date">${new Date(a.data_hora).toLocaleString('pt-PT')}</div>
+                ${a.notas ? `<div style="margin-top:10px; padding:10px; background:var(--bg-main); border-radius:6px; font-size:13px; border-left:3px solid var(--accent);"><strong style="color:var(--text-main);">Notas:</strong><br>${escapeHTML(a.notas)}</div>` : ''}
             `;
             
             // Preencher dados com segurança
@@ -223,8 +229,8 @@ async function loadAvarias() {
                 card.appendChild(btnArchive);
             }
 
-            // Clicar para atribuir (apenas se estiver pendente)
-            if (a.estado === 'pendente') {
+            // Clicar para atribuir (apenas se estiver pendente ou pausada)
+            if (a.estado === 'pendente' || a.estado === 'pausada') {
                 card.onclick = () => {
                     document.getElementById('atribuir-avaria-id').value = a.id;
                     document.getElementById('atribuir-tecnico-select').value = a.tecnico_id || '';
@@ -234,7 +240,7 @@ async function loadAvarias() {
                 card.style.cursor = 'default';
             }
 
-            if (a.estado === 'pendente') colPendente.appendChild(card);
+            if (a.estado === 'pendente' || a.estado === 'pausada') colPendente.appendChild(card);
             else if (a.estado === 'em resolução') colResolucao.appendChild(card);
             else {
                 // Resolvidas - Apply Data Range Filter
@@ -336,7 +342,8 @@ async function loadClientes() {
             document.getElementById('maquina-cliente_id'),
             document.getElementById('edit-maquina-cliente_id'),
             document.getElementById('hist-cliente'),
-            document.getElementById('filter-cliente-maquinas')
+            document.getElementById('filter-cliente-maquinas'),
+            document.getElementById('report-avaria-cliente')
         ];
         
         selects.forEach(select => {
@@ -556,11 +563,13 @@ async function loadTecnicos() {
         const filterDash = document.getElementById('filter-tech-dashboard');
         const statsTech = document.getElementById('stats-tecnico');
         const histTech = document.getElementById('hist-tecnico');
+        const reportTech = document.getElementById('report-avaria-tecnico');
         
         selectAtribuir.innerHTML = '<option value="">-- Selecionar Técnico --</option>';
         if (filterDash) filterDash.innerHTML = '<option value="">Todos</option>';
         if (statsTech) statsTech.innerHTML = '<option value="">Todos</option>';
         if (histTech) histTech.innerHTML = '<option value="">Todos</option>';
+        if (reportTech) reportTech.innerHTML = '<option value="">-- Não Atribuir Agora --</option>';
 
         tecnicos.forEach(t => {
             const safeName = escapeHTML(t.nome);
@@ -568,6 +577,7 @@ async function loadTecnicos() {
             if (filterDash) filterDash.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (statsTech) statsTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
             if (histTech) histTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
+            if (reportTech) reportTech.insertAdjacentHTML('beforeend', `<option value="${t.id}">${safeName}</option>`);
         });
 
     } catch (e) {
@@ -811,7 +821,9 @@ async function loadHistorico() {
                 <td class="col-client"></td>
                 <td class="col-machine"></td>
                 <td>${(a.horas_trabalho !== null && a.horas_trabalho !== undefined && a.horas_trabalho !== '') ? a.horas_trabalho + 'h' : '-'}</td>
-                <td class="col-actions" style="display:flex; gap:5px;">${reportBtnHtml}</td>
+                <td class="col-actions">
+                    <div style="display:flex; gap:5px;">${reportBtnHtml}</div>
+                </td>
             `;
             tr.querySelector('.col-tech').textContent = a.tecnico_nome || '-';
             tr.querySelector('.col-client').textContent = a.cliente_nome || '-';
@@ -819,7 +831,7 @@ async function loadHistorico() {
             
             if (a.relatorio) {
                 
-                const colActions = tr.querySelector('.col-actions');
+                const colActions = tr.querySelector('.col-actions div');
                 const btnPdf = document.createElement('button');
                 btnPdf.className = 'btn-status';
                 btnPdf.style.padding = '5px 10px';
@@ -831,9 +843,17 @@ async function loadHistorico() {
                 btnPdf.style.borderRadius = '6px';
                 btnPdf.style.cursor = 'pointer';
                 btnPdf.style.fontWeight = '600';
-                btnPdf.style.background = '#dc2626';
-                btnPdf.style.color = '#ffffff';
-                btnPdf.innerHTML = '<i class="ph ph-file-pdf"></i> PDF';
+                
+                if (a.relatorio_submetido === 1) {
+                    btnPdf.style.background = '#dc2626';
+                    btnPdf.style.color = '#ffffff';
+                    btnPdf.innerHTML = '<i class="ph ph-file-pdf"></i> PDF';
+                } else {
+                    btnPdf.style.background = '#fef08a';
+                    btnPdf.style.color = '#854d0e';
+                    btnPdf.innerHTML = '<i class="ph ph-file-text"></i> Rascunho';
+                }
+                
                 btnPdf.onclick = () => window.open(`/relatorio.html?id=${a.id}`, '_blank');
                 colActions.appendChild(btnPdf);
             }
@@ -849,6 +869,38 @@ function viewRelatorio(texto) {
     const content = document.getElementById('view-relatorio-content');
     content.textContent = texto;
     openModal('modal-view-relatorio');
+}
+
+async function loadMachinesForReport() {
+    const clienteId = document.getElementById('report-avaria-cliente').value;
+    const select = document.getElementById('report-avaria-maquina');
+    
+    if (!clienteId) {
+        select.innerHTML = '<option value="">Selecione o Cliente primeiro</option>';
+        select.disabled = true;
+        return;
+    }
+
+    try {
+        const maquinas = await apiFetch('/maquinas');
+        const filtered = maquinas.filter(m => m.cliente_id == clienteId);
+        
+        select.innerHTML = '<option value="">-- Selecionar Máquina --</option>';
+        if (filtered.length === 0) {
+            select.innerHTML = '<option value="">Nenhuma máquina encontrada</option>';
+            select.disabled = true;
+        } else {
+            filtered.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.uuid;
+                opt.textContent = m.nome;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+        }
+    } catch (e) {
+        showNotification("Erro ao carregar máquinas", true);
+    }
 }
 
 // INIT
@@ -923,6 +975,51 @@ window.onload = async () => {
     
     const addTechBtn = document.getElementById('btn-open-add-tecnico');
     if (addTechBtn) addTechBtn.addEventListener('click', () => openModal('modal-add-tecnico'));
+
+    // NOVO: Abrir Manual Report
+    const openReportBtn = document.getElementById('btn-open-report-avaria');
+    if (openReportBtn) {
+        openReportBtn.addEventListener('click', () => {
+            loadClientes();
+            loadTecnicos();
+            openModal('modal-report-avaria');
+        });
+    }
+
+    // NOVO: Filtrar máquinas no modal de reporte
+    const reportClientSelect = document.getElementById('report-avaria-cliente');
+    if (reportClientSelect) reportClientSelect.addEventListener('change', loadMachinesForReport);
+
+    // NOVO: Submissão Form Reporte Admin
+    const reportForm = document.getElementById('form-report-avaria');
+    if (reportForm) {
+        reportForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                maquina_id: document.getElementById('report-avaria-maquina').value,
+                tipo_avaria: parseInt(document.getElementById('report-avaria-tipo').value),
+                tecnico_id: document.getElementById('report-avaria-tecnico').value || null,
+                notas: document.getElementById('report-avaria-notas').value
+            };
+
+            if (!data.maquina_id) return showNotification("Selecione uma máquina válida", true);
+
+            try {
+                await apiFetch('/avarias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                showNotification('Avaria reportada com sucesso!');
+                closeModal('modal-report-avaria');
+                reportForm.reset();
+                document.getElementById('report-avaria-maquina').disabled = true;
+                loadAvarias();
+            } catch (e) {
+                showNotification(e.message, true);
+            }
+        });
+    }
 
     // Fecho de Modals
     document.querySelectorAll('.close-btn').forEach(btn => {

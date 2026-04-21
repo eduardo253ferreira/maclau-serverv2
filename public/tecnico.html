@@ -122,6 +122,25 @@
         </main>
     </div>
 
+    <!-- Modal Pausar -->
+    <div id="modal-pausar" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-pausar">&times;</span>
+            <h2 id="modal-pausa-title" style="color:var(--warning);">Pausar Reparação</h2>
+            <p id="modal-pausa-subtitle">Indique o motivo pelo qual não foi possível concluir a intervenção (ex: falta de material).</p>
+            <form id="form-pausar">
+                <input type="hidden" id="pausar-avaria-id">
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Motivo da Pausa *</label>
+                    <textarea id="pausar-motivo" rows="3" required style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; resize:vertical;" placeholder="Ex: Faltava a placa eletrónica XYZ..."></textarea>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:flex-end; margin-top:20px;">
+                    <button type="submit" id="btn-submit-pausa" class="btn-primary" style="width:100%; background:var(--warning); color:white; border:none;">Pausar Avaria</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal Relatorio -->
     <div id="modal-relatorio" class="modal hidden">
         <div class="modal-content">
@@ -143,6 +162,17 @@
                     <label>Tempo de Trabalho (Horas)</label>
                     <input type="number" id="relatorio-horas" step="0.1" min="0" style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit;" placeholder="Ex: 1.5">
                 </div>
+                
+                <div class="form-group" style="margin-top:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                        <label style="margin:0;">Assinatura do Cliente (Opcional)</label>
+                        <button type="button" id="btn-clear-signature" style="background:transparent; border:none; color:var(--text-secondary); font-size:12px; cursor:pointer;"><i class="ph ph-eraser"></i> Limpar</button>
+                    </div>
+                    <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#f8fafc; touch-action:none;">
+                        <canvas id="signature-pad" width="400" height="150" style="width:100%; display:block; touch-action:none;"></canvas>
+                    </div>
+                </div>
+
                 <div style="display:flex; gap:12px; margin-top:20px;">
                     <button type="button" id="btn-save-draft" class="btn-primary" style="flex:1; background:var(--accent-light); color:var(--accent); box-shadow:none;">Guardar Rascunho</button>
                     <button type="submit" id="btn-submit-report" class="btn-primary" style="flex:1;">Submeter ao Admin</button>
