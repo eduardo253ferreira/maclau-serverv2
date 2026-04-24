@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Dashboard Toggle Slide */
+        .dashboard-toggle-container {
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .dashboard-toggle {
+            display: flex;
+            position: relative;
+            gap: 4px;
+        }
+        .toggle-btn-main {
+            background: transparent;
+            border: none;
+            padding: 8px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            z-index: 2;
+            min-width: 120px;
+        }
+        .toggle-btn-main.active {
+            color: var(--accent);
+        }
+        .toggle-slider-main {
+            position: absolute;
+            height: 100%;
+            width: calc(50% - 2px);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+        [data-main-filter="avarias"].active ~ .toggle-slider-main { transform: translateX(0); }
+        [data-main-filter="servicos"].active ~ .toggle-slider-main { transform: translateX(calc(100% + 4px)); }
+
+        @media (max-width: 768px) {
+            .view-header.flex-header { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .dashboard-toggle-container { width: 100%; }
+            .dashboard-toggle { width: 100%; }
+            .toggle-btn-main { flex: 1; }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Notificação global -->
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="dashboard">
+                    <i class="ph ph-gauge"></i> Dashboards
+                </button>
+                <button class="nav-btn" data-target="historico">
+                    <i class="ph ph-clock-counter-clockwise"></i> Histórico Resolvidas
+                </button>
+                <button class="nav-btn" data-target="estatisticas">
+                    <i class="ph ph-chart-line-up"></i> Estatísticas
+                </button>
+                <button class="nav-btn" data-target="clientes">
+                    <i class="ph ph-users"></i> Gestão de Clientes
+                </button>
+                <button class="nav-btn" data-target="maquinas">
+                    <i class="ph ph-washing-machine"></i> Gestão de Máquinas
+                </button>
+                <button class="nav-btn" data-target="tecnicos">
+                    <i class="ph ph-wrench"></i> Gestão de Técnicos
+                </button>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100"
+                    style="background:var(--danger); box-shadow:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ph ph-sign-out" style="font-size:18px;"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-area">
+
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view active">
+                <header class="view-header flex-header" style="flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h1>Monitorização</h1>
+                        <p>Gestão centralizada de avarias e serviços técnicos.</p>
+                        <div class="dashboard-toggle-container">
+                            <div class="dashboard-toggle">
+                                <button class="toggle-btn-main active" data-main-filter="avarias">Avarias</button>
+                                <button class="toggle-btn-main" data-main-filter="servicos">Serviços</button>
+                                <div class="toggle-slider-main"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="filter-group">
+                            <label for="filter-tech-dashboard" class="filter-label">Filtrar Técnico:</label>
+                            <select id="filter-tech-dashboard" class="filter-select">
+                                <option value="">Todos</option>
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+                </header>
+                           <!-- Board Avarias Wrapper -->
+                <div id="wrapper-board-avarias">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <button id="btn-open-report-avaria" class="btn-report-avaria"
+                                        style="padding: 6px 14px; font-size: 13px;">
+                                        <i class="ph ph-plus-circle"></i>
+                                        <span>Nova Avaria</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+
+                        <!-- Resolvidas -->
+                        <div class="board-column" id="col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidas</h3>
+                                <div style="display:flex; gap: 8px; align-items:center;">
+                                    <input type="date" id="filter-date-start"
+                                        style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                        title="De">
+                                    <span style="font-size:12px;">Até</span>
+                                    <input type="date" id="filter-date-end"
+                                        style="padding:4px; font-size:12px; border:1px solid var(--border-color); border-radius:4px;"
+                                        title="Até">
+                                    <button class="btn-toggle-col" data-col="col-resolvida">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Board Servicos Wrapper -->
+                <div id="wrapper-board-servicos" class="hidden">
+                    <div class="board-container">
+                        <!-- Pendentes -->
+                        <div class="board-column" id="srv-col-pendente">
+                            <div class="column-header">
+                                <h3><span class="status-dot red"></span>Pendentes</h3>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <button id="btn-open-report-servico" class="btn-report-avaria"
+                                        style="padding: 6px 14px; font-size: 13px; background: linear-gradient(135deg, var(--accent) 0%, #1E4419 100%); box-shadow: 0 4px 12px rgba(45, 90, 39, 0.25);">
+                                        <i class="ph ph-plus-circle"></i>
+                                        <span>Novo Serviço</span>
+                                    </button>
+                                    <button class="btn-toggle-col" data-col="srv-col-pendente">
+                                        <i class="ph ph-caret-up"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Em Resolução -->
+                        <div class="board-column" id="srv-col-resolucao">
+                            <div class="column-header">
+                                <h3><span class="status-dot yellow"></span>Em Resolução</h3>
+                                <button class="btn-toggle-col" data-col="srv-col-resolucao">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                        <!-- Resolvidos -->
+                        <div class="board-column" id="srv-col-resolvida">
+                            <div class="column-header">
+                                <h3><span class="status-dot green"></span>Resolvidos</h3>
+                                <button class="btn-toggle-col" data-col="srv-col-resolvida">
+                                    <i class="ph ph-caret-up"></i>
+                                </button>
+                            </div>
+                            <div class="cards-wrapper"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Estatísticas View -->
+            <section id="view-estatisticas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Estatísticas</h1>
+                        <p>Métricas das avarias resolvidas.</p>
+                    </div>
+                </header>
+
+                <div
+                    style="background:var(--surface-color); padding:20px; border-radius:12px; margin-bottom:20px; display:flex; gap:20px; align-items:center;">
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Agrupar
+                            por</label>
+                        <select id="stats-agrupamento"
+                            style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="dia">Dia</option>
+                            <option value="semana">Semana</option>
+                            <option value="mes">Mês</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="display:block; font-size:12px; font-weight:600; margin-bottom:5px;">Filtrar
+                            Técnico</label>
+                        <select id="stats-tecnico"
+                            style="padding:8px; border-radius:6px; border:1px solid var(--border-color);">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </div>
+
+                <div
+                    style="background:var(--surface-color); padding:20px; border-radius:12px; position: relative; height: 400px; width: 100%;">
+                    <canvas id="statsChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Histórico View -->
+            <section id="view-historico" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Histórico de Avarias</h1>
+                        <p>Registo de todas as intervenções concluídas.</p>
+                    </div>
+                </header>
+
+                <div class="filter-dropdown-wrapper">
+                    <button id="btn-filter-toggle" class="btn-filter-main">
+                        <i class="ph ph-funnel"></i>
+                        <span>Filtrar Resultados</span>
+                        <div id="active-filters-count" style="display:none;">0</div>
+                    </button>
+
+                    <div id="filter-menu" class="filter-menu">
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-buildings"></i> Lavandaria</label>
+                            <select id="hist-cliente">
+                                <option value="">Todas as Lavandarias</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-wrench"></i> Máquina</label>
+                            <select id="hist-maquina">
+                                <option value="">Todas (Selecione Lavandaria)</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-user"></i> Técnico</label>
+                            <select id="hist-tecnico">
+                                <option value="">Todos os Técnicos</option>
+                            </select>
+                        </div>
+                        <div class="filter-menu-item">
+                            <label><i class="ph ph-coins"></i> Faturação</label>
+                            <select id="hist-faturacao">
+                                <option value="">Todos os Estados</option>
+                                <option value="Por Faturar">Por Faturar</option>
+                                <option value="Faturado">Faturado</option>
+                                <option value="Oferta">Oferta</option>
+                                <option value="Garantia">Garantia</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data Resolução</th>
+                                <th>Técnico</th>
+                                <th>Lavandaria</th>
+                                <th>Máquina</th>
+                                <th>Horas Trabalho (M)</th>
+                                <th>Faturação</th>
+                                <th>Relatório</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-historico-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Clientes View -->
+            <section id="view-clientes" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Clientes</h1>
+                        <p>Lista de lavandarias.</p>
+                    </div>
+                    <button id="btn-open-add-client" class="btn-primary">+ Novo Cliente</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Email</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-clientes-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Máquinas View -->
+            <section id="view-maquinas" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Máquinas</h1>
+                        <p>Atribua máquinas a clientes e gere QR Codes.</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-cliente-maquinas" class="filter-label">Filtrar Cliente:</label>
+                        <select id="filter-cliente-maquinas" class="filter-select">
+                            <option value="">Todos</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <button id="btn-open-add-maquina" class="btn-primary">+ Nova Máquina</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Máquina</th>
+                                <th>Nº Série</th>
+                                <th>Cliente</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-maquinas-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Técnicos View -->
+            <section id="view-tecnicos" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Técnicos</h1>
+                        <p>Gira a sua equipa de manutenção.</p>
+                    </div>
+                    <button id="btn-open-add-tecnico" class="btn-primary">+ Novo Técnico</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Especialidade</th>
+                                <th>Contacto</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-tecnicos-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div> <!-- .app-container -->
+
+    <!-- Modals -->
+    <!-- Modal Add Cliente -->
+    <div id="modal-add-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-client">&times;</span>
+            <h2>Adicionar Cliente</h2>
+            <form id="form-add-client">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="client-nome" required placeholder="Ex: Lavandaria Central">
+                </div>
+                <div class="form-group">
+                    <label>Telefone (opcional)</label>
+                    <input type="text" id="client-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email (opcional)</label>
+                    <input type="email" id="client-email" placeholder="Ex: email@exemplo.pt">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Maquina -->
+    <div id="modal-add-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-maquina">&times;</span>
+            <h2>Nova Máquina</h2>
+            <form id="form-add-maquina">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="maquina-cliente_id" required>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="maquina-marca" required placeholder="Ex: Fagor">
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="maquina-modelo" required placeholder="Ex: LN-11">
+                </div>
+                <div class="form-group">
+                    <label>Número de Série</label>
+                    <input type="text" id="maquina-numero-serie" placeholder="Ex: SN-123456789">
+                </div>
+                <div class="form-group">
+                    <label>Data de Instalação</label>
+                    <input type="date" id="maquina-data-instalacao">
+                </div>
+                <div class="form-group">
+                    <label>Início da Garantia</label>
+                    <input type="date" id="maquina-data-inicio-garantia">
+                </div>
+                <div class="form-group">
+                    <label>Fim da Garantia</label>
+                    <input type="date" id="maquina-data-fim-garantia">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Cliente -->
+    <div id="modal-edit-client" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-client">&times;</span>
+            <h2>Editar Cliente</h2>
+            <form id="form-edit-client">
+                <input type="hidden" id="edit-client-id">
+                <div class="form-group">
+                    <label>Nome da Lavandaria *</label>
+                    <input type="text" id="edit-client-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-client-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-client-email">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Edit Maquina -->
+    <div id="modal-edit-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-maquina">&times;</span>
+            <h2>Editar Máquina</h2>
+            <form id="form-edit-maquina">
+                <input type="hidden" id="edit-maquina-id">
+                <div class="form-group">
+                    <label>Selecionar Cliente * (Apenas para visualização)</label>
+                    <select id="edit-maquina-cliente_id" required disabled>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Marca *</label>
+                    <input type="text" id="edit-maquina-marca" required>
+                </div>
+                <div class="form-group">
+                    <label>Modelo *</label>
+                    <input type="text" id="edit-maquina-modelo" required>
+                </div>
+                <div class="form-group">
+                    <label>Número de Série</label>
+                    <input type="text" id="edit-maquina-numero-serie">
+                </div>
+                <div class="form-group">
+                    <label>Data de Instalação</label>
+                    <input type="date" id="edit-maquina-data-instalacao">
+                </div>
+                <div class="form-group">
+                    <label>Início da Garantia</label>
+                    <input type="date" id="edit-maquina-data-inicio-garantia">
+                </div>
+                <div class="form-group">
+                    <label>Fim da Garantia</label>
+                    <input type="date" id="edit-maquina-data-fim-garantia">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div id="modal-qrcode" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-qrcode">&times;</span>
+            <img src="img/logo.png" alt="Maclau Logo" id="print-maclau-logo"
+                style="display:none; max-width: 150px; margin: 0 auto 10px auto;">
+            <h3 id="print-client-name" class="print-only-text" style="display:none; margin: 0;"></h3>
+            <h4 id="print-machine-name" class="print-only-text"
+                style="display:none; margin: 5px 0 15px 0; color: #555;"></h4>
+            <h2>QR Code da Máquina</h2>
+            <p>Imprima e cole este código na máquina.</p>
+            <div id="qrcode-image-container" style="margin: 20px 0;"></div>
+            <button id="btn-print-qr" class="btn-primary w-100">Imprimir</button>
+        </div>
+    </div>
+
+    <!-- Modal Status Avaria -->
+    <div id="modal-status-avaria" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-status-avaria">&times;</span>
+            <h2>Atualizar Estado da Avaria</h2>
+            <p>Selecione o novo estado da avaria para esta máquina.</p>
+            <form id="form-status-avaria">
+                <input type="hidden" id="status-avaria-id">
+                <div class="form-group">
+                    <label>Estado da Avaria</label>
+                    <select id="status-avaria-select" required>
+                        <option value="pendente">Pendente</option>
+                        <option value="em resolução">Em Resolução</option>
+                        <option value="resolvida">Resolvida</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar Estado</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Atribuir Técnico -->
+    <div id="modal-atribuir-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-atribuir-tecnico">&times;</span>
+            <h2>Atribuir Técnico</h2>
+            <p>Selecione o técnico responsável por esta avaria.</p>
+            <form id="form-atribuir-tecnico">
+                <input type="hidden" id="atribuir-avaria-id">
+                <div class="form-group">
+                    <label>Técnico</label>
+                    <select id="atribuir-tecnico-select" required>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Confirmar Atribuição</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Add Técnico -->
+    <div id="modal-add-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-add-tecnico">&times;</span>
+            <h2>Adicionar Técnico</h2>
+            <form id="form-add-tecnico">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="tecnico-nome" required placeholder="Ex: João Silva">
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="tecnico-especialidade" placeholder="Ex: Elétrica">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="tecnico-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos" placeholder="Ex: 910000000">
+                </div>
+                <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" id="tecnico-email" required placeholder="Ex: joao@maclau.pt">
+                </div>
+                <button type="submit" class="btn-primary w-100">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Tech Success (With Password Copy) -->
+    <div id="modal-tech-success" class="modal hidden">
+        <div class="modal-content text-center">
+            <span class="close-btn" data-modal="modal-tech-success">&times;</span>
+            <div style="font-size: 50px; color: var(--success); margin-bottom: 20px;">
+                <i class="ph ph-check-circle"></i>
+            </div>
+            <h2>Técnico Adicionado!</h2>
+            <p>O técnico foi criado com sucesso. Por favor, entregue as credenciais abaixo:</p>
+
+            <div
+                style="background: var(--bg-main); padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px dashed var(--accent);">
+                <p
+                    style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">
+                    Palavra-Passe Temporária</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+                    <span id="display-temp-password"
+                        style="font-family: monospace; font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 2px;"></span>
+                    <button id="btn-copy-password" class="btn-icon" title="Copiar Password"
+                        style="width: 44px; height: 44px; font-size: 20px;">
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <p style="font-size: 13px; color: var(--danger); font-weight: 600;">Atenção: Esta palavra-passe não voltará
+                a ser exibida.</p>
+            <button id="btn-tech-success-ok" class="btn-primary w-100" style="margin-top: 24px;">Concluído</button>
+        </div>
+    </div>
+
+    <!-- Modal Edit Técnico -->
+    <div id="modal-edit-tecnico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-edit-tecnico">&times;</span>
+            <h2>Editar Técnico</h2>
+            <form id="form-edit-tecnico">
+                <input type="hidden" id="edit-tecnico-id">
+                <div class="form-group">
+                    <label>Nome Completo *</label>
+                    <input type="text" id="edit-tecnico-nome" required>
+                </div>
+                <div class="form-group">
+                    <label>Especialidade</label>
+                    <input type="text" id="edit-tecnico-especialidade">
+                </div>
+                <div class="form-group">
+                    <label>Telefone</label>
+                    <input type="text" id="edit-tecnico-telefone" pattern="[0-9]{9}"
+                        title="O número de telefone deve ter exatamente 9 dígitos">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-tecnico-email">
+                </div>
+                <div class="form-group">
+                    <label>Palavra-passe (Opcional, deixe em branco para não alterar)</label>
+                    <input type="text" id="edit-tecnico-password" placeholder="Nova palavra-passe">
+                </div>
+                <button type="submit" class="btn-primary w-100">Atualizar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal View Maquina -->
+    <div id="modal-view-maquina" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-maquina">&times;</span>
+            <h2>Detalhes da Máquina</h2>
+            <div style="margin-bottom: 12px;"><strong>Cliente:</strong> <span id="view-maquina-cliente"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Marca:</strong> <span id="view-maquina-marca"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Modelo:</strong> <span id="view-maquina-modelo"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Nº Série:</strong> <span id="view-maquina-serie"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Data de Instalação:</strong> <span
+                    id="view-maquina-instalacao"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Início Garantia:</strong> <span
+                    id="view-maquina-iniciogarantia"></span></div>
+            <div style="margin-bottom: 12px;"><strong>Fim Garantia:</strong> <span id="view-maquina-fimgarantia"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Reportar Avaria (Admin Manual) -->
+    <div id="modal-report-avaria" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-avaria">&times;</span>
+            <h2>Reportar Avaria</h2>
+            <p>Utilize este formulário quando um cliente ligar a reportar um problema.</p>
+            <form id="form-report-avaria">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-avaria-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Selecionar Máquina *</label>
+                    <select id="report-avaria-maquina" required disabled>
+                        <option value="">Selecione o Cliente primeiro</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Avaria *</label>
+                    <select id="report-avaria-tipo" required>
+                        <option value="1">⚡ Avaria Elétrica</option>
+                        <option value="3">⚙️ Avaria Mecânica</option>
+                        <option value="2">❓ Avaria Desconhecida</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas / Descrição do Problema</label>
+                    <textarea id="report-avaria-notas" rows="3"
+                        placeholder="Ex: O cliente diz que a máquina faz um barulho estranho ao centrifugar..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico (Opcional)</label>
+                    <select id="report-avaria-tecnico">
+                        <option value="">-- Não Atribuir Agora --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Reporte</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Reportar Serviço (Admin Manual) -->
+    <div id="modal-report-servico" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-report-servico">&times;</span>
+            <h2>Reportar Serviço</h2>
+            <p>Registe um novo serviço de instalação ou transporte.</p>
+            <form id="form-report-servico">
+                <div class="form-group">
+                    <label>Selecionar Cliente *</label>
+                    <select id="report-servico-cliente" required>
+                        <option value="">Selecione o Cliente</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Serviço *</label>
+                    <select id="report-servico-tipo" required>
+                        <option value="Instalação">Instalação</option>
+                        <option value="Transporte">Transporte</option>
+                        <option value="Transporte/Instalação">Transporte/Instalação</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tipo de Camião *</label>
+                    <select id="report-servico-camiao" required>
+                        <option value="Camião da Empresa Pessoal">Camião da Empresa Pessoal</option>
+                        <option value="Empresa Particular">Empresa Particular</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Notas Adicionais</label>
+                    <textarea id="report-servico-notas" rows="3"
+                        placeholder="Detalhes sobre o serviço..."
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border-color); font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Atribuir Técnico (Opcional)</label>
+                    <select id="report-servico-tecnico">
+                        <option value="">-- Não Atribuir Agora --</option>
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary w-100">Criar Serviço</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Ver Nota Completa -->
+    <div id="modal-view-note" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-view-note">&times;</span>
+            <h2>Nota Completa</h2>
+            <div id="full-note-content" style="margin-top: 20px; white-space: pre-wrap; font-size: 15px; line-height: 1.6; color: var(--text-primary); background: var(--bg-main); padding: 15px; border-radius: 10px; border-left: 4px solid var(--accent);">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/admin.js?v=3.0"></script>
+</body>
+
+</html>

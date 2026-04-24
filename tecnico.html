@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maclau - Portal do Técnico</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css"> <!-- Reusing admin styles for consistency -->
+    <style>
+        /* Dashboard Toggle Slide */
+        .dashboard-toggle-container {
+            background: #f1f5f9;
+            padding: 4px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        .dashboard-toggle {
+            display: flex;
+            position: relative;
+            gap: 4px;
+        }
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            z-index: 2;
+            min-width: 80px;
+        }
+        .toggle-btn.active {
+            color: var(--accent);
+        }
+        .toggle-slider {
+            position: absolute;
+            height: 100%;
+            width: calc(33.33% - 4px);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+        /* Positions for 3 buttons */
+        [data-filter="all"].active ~ .toggle-slider { transform: translateX(0); }
+        [data-filter="avaria"].active ~ .toggle-slider { transform: translateX(calc(100% + 4px)); }
+        [data-filter="servico"].active ~ .toggle-slider { transform: translateX(calc(200% + 8px)); }
+
+        @media (max-width: 480px) {
+            .dashboard-toggle-container { width: 100%; }
+            .dashboard-toggle { width: 100%; }
+            .toggle-btn { flex: 1; padding: 10px 5px; font-size: 13px; }
+        }
+    </style>
+    <link rel="icon" type="image/png" href="img/logo.png">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+
+<body>
+    <div id="notification" class="notification hidden"></div>
+
+    <div class="app-container">
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button id="btn-toggle-sidebar" class="btn-menu">
+                <i class="ph ph-list"></i>
+            </button>
+            <img src="img/logo.png" alt="Maclau Logo" class="mobile-logo">
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="img/logo.png" alt="Maclau Logo" class="admin-logo">
+                <button id="btn-close-sidebar" class="btn-close-sidebar">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-target="dashboard">Tarefas Pendentes</button>
+                <button class="nav-btn" data-target="historico">Histórico de Serviços</button>
+                <button class="nav-btn" data-target="perfil">Perfil</button>
+            </nav>
+            <div style="padding: 24px; margin-top: auto;">
+                <button id="btn-logout" class="btn-primary w-100"
+                    style="background:var(--danger); box-shadow:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="ph ph-sign-out" style="font-size:18px;"></i> Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <!-- Dashboard View -->
+            <section id="view-dashboard" class="view">
+                <header class="view-header">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; flex-wrap: wrap; gap: 20px;">
+                        <div>
+                            <h1 id="tech-name-display">Olá!</h1>
+                            <p id="tech-stats">A carregar as suas tarefas...</p>
+                        </div>
+                        
+                        <!-- Toggle Slide -->
+                        <div class="dashboard-toggle-container">
+                            <div class="dashboard-toggle">
+                                <button class="toggle-btn active" data-filter="all">Todas</button>
+                                <button class="toggle-btn" data-filter="avaria">Avarias</button>
+                                <button class="toggle-btn" data-filter="servico">Serviços</button>
+                                <div class="toggle-slider"></div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="repairs-list" id="repairs-container">
+                    <!-- JS popula aqui -->
+                </div>
+            </section>
+
+            <!-- Histórico View -->
+            <section id="view-historico" class="view hidden">
+                <header class="view-header flex-header">
+                    <div>
+                        <h1>Histórico de Serviços</h1>
+                        <p>Aqui encontra todas as avarias que já solucionou.</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap: 10px;">
+                        <label for="filter-hist-cliente" class="filter-label">Filtrar Cliente:</label>
+                        <select id="filter-hist-cliente" class="filter-select">
+                            <option value="">Todos / Pesquisar Cliente</option>
+                        </select>
+                    </div>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Lavandaria</th>
+                                <th>Máquina</th>
+                                <th>Horas (M)</th>
+                                <th>Relatório</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-historico-body">
+                            <!-- JS popula aqui -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Perfil View -->
+            <section id="view-perfil" class="view hidden">
+                <header class="view-header">
+                    <div>
+                        <h1>O Meu Perfil</h1>
+                        <p>Faça a gestão da sua segurança e das suas credenciais de acesso.</p>
+                    </div>
+                </header>
+
+                <div style="max-width: 440px;">
+                    <div class="modal-content"
+                        style="position: static; box-shadow: var(--shadow-sm); border: 1px solid var(--border); width: 100%;">
+                        <h2 style="margin-bottom: 20px;">Mudar Palavra-Passe</h2>
+                        <form id="form-change-password">
+                            <div class="form-group">
+                                <label>Palavra-Passe Atual</label>
+                                <input type="password" id="pwd-old" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Nova Palavra-Passe</label>
+                                <input type="password" id="pwd-new" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Confirmar Nova Palavra-Passe</label>
+                                <input type="password" id="pwd-confirm" required>
+                            </div>
+                            <button type="submit" class="btn-primary w-100">Atualizar Password</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Pausar -->
+    <div id="modal-pausar" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-btn" data-modal="modal-pausar">&times;</span>
+            <h2 id="modal-pausa-title" style="color:var(--warning);">Pausar Reparação</h2>
+            <p id="modal-pausa-subtitle">Indique o motivo pelo qual não foi possível concluir a intervenção (ex: falta
+                de material).</p>
+            <form id="form-pausar">
+                <input type="hidden" id="pausar-avaria-id">
+                <input type="hidden" id="pausar-type" value="avaria">
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Motivo da Pausa *</label>
+                    <textarea id="pausar-motivo" rows="3" required
+                        style="width:100%; padding:12px; border-radius:8px; border:1px solid var(--border); font-family:inherit; resize:vertical;"
+                        placeholder="Ex: Faltava a placa eletrónica XYZ..."></textarea>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:flex-end; margin-top:20px;">
+                    <button type="submit" id="btn-submit-pausa" class="btn-primary"
+                        style="width:100%; background:var(--warning); color:white; border:none;">Pausar Avaria</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Relatorio (Interativo A4) -->
+    <div id="modal-relatorio" class="modal hidden">
+        <div class="modal-content report-modal-content">
+            <span class="close-btn" data-modal="modal-relatorio"
+                style="color:white; top:10px; right:20px;">&times;</span>
+
+            <div class="a4-toolbar">
+                <button type="button" id="btn-save-draft" class="btn-a4-draft">Guardar Rascunho</button>
+                <button type="submit" id="btn-submit-report" class="btn-a4-submit">Submeter ao Admin</button>
+            </div>
+
+            <div class="a4-sheet" id="a4-report-sheet">
+                <header class="a4-header">
+                    <div class="a4-logo-section">
+                        <img src="img/logo.png" alt="Maclau Logo">
+                    </div>
+                    <div class="a4-id-section">
+                        <h2 id="a4-report-type">Relatório de Intervenção</h2>
+                        <p id="a4-report-id">ID: #00000</p>
+                        <p id="a4-report-date">Data: --/--/----</p>
+                    </div>
+                </header>
+
+                <div class="a4-grid">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-user"></i> Cliente</h3>
+                        <div class="a4-info-box">
+                            <p><strong id="a4-cliente-nome">---</strong></p>
+                            <p id="a4-cliente-email">---</p>
+                            <p id="a4-cliente-contato">---</p>
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <h3 id="a4-details-title"><i class="ph ph-wrench"></i> Detalhes</h3>
+                        <div class="a4-info-box">
+                            <p><strong>Técnico:</strong> <span id="a4-tecnico-nome">---</span></p>
+                            <div id="a4-machine-row">
+                                <p><strong>Máquina:</strong> <span id="a4-maquina-nome">---</span></p>
+                                <p><strong>Avaria:</strong> <span id="a4-tipo-avaria">---</span></p>
+                            </div>
+                            <div id="a4-service-row" style="display:none;">
+                                <p><strong>Serviço:</strong> <span id="a4-tipo-servico">---</span></p>
+                                <p><strong>Camião:</strong> <span id="a4-tipo-camiao">---</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-clipboard-text"></i> Descrição da Intervenção</h3>
+                    <div class="a4-editable-area">
+                        <textarea id="relatorio-texto"
+                            placeholder="Descreva aqui o trabalho que realizou..."></textarea>
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3><i class="ph ph-package"></i> Peças Substituídas</h3>
+                    <div class="a4-editable-area" style="min-height: 60px;">
+                        <textarea id="relatorio-pecas" rows="2" placeholder="Liste as peças utilizadas..."></textarea>
+                    </div>
+                </div>
+
+                <div class="a4-editable-section">
+                    <h3 style="display: flex; align-items: center; justify-content: space-between;">
+                        <span><i class="ph ph-camera"></i> Fotos da Intervenção</span>
+                        <button type="button" id="btn-add-fotos" class="btn-secondary" style="padding: 4px 8px; font-size: 12px;">
+                            <i class="ph ph-plus"></i> Adicionar
+                        </button>
+                    </h3>
+                    <div class="a4-editable-area">
+                        <input type="file" id="relatorio-fotos" multiple accept="image/*" style="display:none;">
+                        <div id="fotos-preview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:5px;">
+                            <!-- Fotos serão carregadas aqui -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="a4-grid" style="margin-bottom: 20px;">
+                    <div class="a4-section">
+                        <h3><i class="ph ph-clock"></i> Tempo de Trabalho</h3>
+                        <div class="form-group" style="margin:0;">
+                            <input type="number" id="relatorio-horas" step="0.1" min="0" placeholder="Ex: 1.5"
+                                style="padding:8px; font-size:14px; border-radius:6px; border:1px solid #cbd5e1;">
+                        </div>
+                    </div>
+                    <div class="a4-section">
+                        <!-- Espaço vazio ou info extra -->
+                    </div>
+                </div>
+
+                <div class="a4-signature-grid">
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO TÉCNICO</span>
+                            <button type="button" id="btn-clear-signature-tech"
+                                style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i
+                                    class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad-tech" width="400" height="150"
+                                style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line">Técnico Responsável</div>
+                    </div>
+                    <div class="a4-signature-block">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <span style="font-size:10px; color:#64748b; font-weight:700;">ASSINATURA DO CLIENTE</span>
+                            <button type="button" id="btn-clear-signature"
+                                style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer;"><i
+                                    class="ph ph-eraser"></i> Limpar</button>
+                        </div>
+                        <div
+                            style="border:1px solid #e2e8f0; border-radius:4px; background:#f8fafc; touch-action:none;">
+                            <canvas id="signature-pad" width="400" height="150"
+                                style="width:100%; height:auto; display:block; touch-action:none;"></canvas>
+                        </div>
+                        <div class="a4-signature-line" style="margin-top:10px;">Assinatura do Cliente</div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" id="relatorio-avaria-id">
+            <input type="hidden" id="relatorio-type" value="avaria">
+            <input type="hidden" id="relatorio-status-change">
+
+            <p id="relatorio-warning"
+                style="text-align:center; font-size:12px; color:#cbd5e1; margin-top:15px; display:none;">
+                <i class="ph ph-warning-circle"></i> Atenção: Após submeter, o relatório torna-se definitivo.
+            </p>
+        </div>
+    </div>
+
+    <script src="/js/tecnico.js?v=3.0"></script>
+</body>
+
+</html>

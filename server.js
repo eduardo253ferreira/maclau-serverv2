@@ -12,6 +12,30 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const nodemailer = require('nodemailer');
+const multer = require('multer');
+
+// --- Configuração Multer (Upload de Fotos) ---
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'public/uploads/reports')
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+        cb(null, 'report-' + uniqueSuffix + path.extname(file.originalname))
+    }
+});
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Apenas imagens são permitidas!'));
+        }
+    }
+});
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,7 +98,7 @@ app.use(cors({
         if (!origin) return callback(null, true);
 
         const isLocalHost = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.') || origin.includes('10.');
-        
+
         if (allowedOrigins.includes(origin) || isLocalHost) {
             callback(null, true);
         } else {
@@ -204,7 +228,12 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
             db.run(`CREATE TABLE IF NOT EXISTS maquinas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 cliente_id INTEGER,
-                nome TEXT NOT NULL,
+                marca TEXT,
+                modelo TEXT,
+                numero_serie TEXT,
+                data_instalacao TEXT,
+                data_inicio_garantia TEXT,
+                data_fim_garantia TEXT,
                 uuid TEXT NOT NULL UNIQUE,
                 data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (cliente_id) REFERENCES clientes (id)
@@ -215,10 +244,10 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
                 maquina_id TEXT NOT NULL, 
                 tipo_avaria INTEGER NOT NULL,
                 estado TEXT DEFAULT 'pendente',
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
                 tecnico_id INTEGER,
                 arquivada INTEGER DEFAULT 0,
                 data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
-                data_hora_inicio DATETIME,
                 data_hora_inicio DATETIME,
                 data_hora_fim DATETIME,
                 relatorio TEXT,
@@ -240,8 +269,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
             )`);
 
             // Garantir que novas colunas existem se a tabela já foi criada anteriormente
-            db.run(`ALTER TABLE avarias ADD COLUMN tecnico_id INTEGER REFERENCES tecnicos(id)`, (err) => { });
-            db.run(`ALTER TABLE avarias ADD COLUMN arquivada INTEGER DEFAULT 0`, (err) => { });
             db.run(`ALTER TABLE avarias ADD COLUMN data_hora_inicio DATETIME`, (err) => { });
             db.run(`ALTER TABLE avarias ADD COLUMN data_hora_fim DATETIME`, (err) => { });
             db.run(`ALTER TABLE avarias ADD COLUMN relatorio TEXT`, (err) => { });
@@ -251,6 +278,47 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.db'), (err) => {
             db.run(`ALTER TABLE avarias ADD COLUMN notas TEXT`, (err) => { });
             db.run(`ALTER TABLE avarias ADD COLUMN data_hora_pausa DATETIME`, (err) => { });
             db.run(`ALTER TABLE avarias ADD COLUMN assinatura_cliente TEXT`, (err) => { });
+            db.run(`ALTER TABLE avarias ADD COLUMN estado_faturacao TEXT DEFAULT 'Por Faturar'`, (err) => { });
+            db.run(`ALTER TABLE avarias ADD COLUMN assinatura_tecnico TEXT`, (err) => {
+                if (err) console.log("Coluna assinatura_tecnico já existe em avarias");
+            });
+            db.run(`ALTER TABLE servicos ADD COLUMN assinatura_tecnico TEXT`, (err) => {
+                if (err) console.log("Coluna assinatura_tecnico já existe em servicos");
+            });
+
+            db.run(`CREATE TABLE IF NOT EXISTS servicos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cliente_id INTEGER NOT NULL,
+                tecnico_id INTEGER,
+                tipo_servico TEXT NOT NULL,
+                tipo_camiao TEXT NOT NULL,
+                estado TEXT DEFAULT 'pendente',
+                estado_faturacao TEXT DEFAULT 'Por Faturar',
+                arquivada INTEGER DEFAULT 0,
+                data_hora DATETIME DEFAULT CURRENT_TIMESTAMP,
+                data_hora_inicio DATETIME,
+                data_hora_fim DATETIME,
+                relatorio TEXT,
+                relatorio_submetido INTEGER DEFAULT 0,
+                pecas_substituidas TEXT,
+                horas_trabalho REAL,
+                notas TEXT,
+                data_hora_pausa DATETIME,
+                assinatura_cliente TEXT,
+                assinatura_tecnico TEXT,
+                FOREIGN KEY (cliente_id) REFERENCES clientes (id),
+                FOREIGN KEY (tecnico_id) REFERENCES tecnicos (id)
+            )`);
+            
+            db.run(`CREATE TABLE IF NOT EXISTS fotos_relatorio (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                avaria_id INTEGER,
+                servico_id INTEGER,
+                caminho TEXT NOT NULL,
+                data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (avaria_id) REFERENCES avarias (id),
+                FOREIGN KEY (servico_id) REFERENCES servicos (id)
+            )`);
 
             // 🔒 SEGURANÇA: Migração com serialize para evitar race conditions
             db.serialize(() => {
@@ -528,7 +596,7 @@ app.delete('/api/clientes/:id', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT m.id, m.nome, m.uuid, strftime('%Y-%m-%dT%H:%M:%SZ', m.data_criacao) as data_criacao, c.nome as cliente_nome, c.id as cliente_id 
+        SELECT m.id, m.marca, m.modelo, m.numero_serie, m.data_instalacao, m.data_inicio_garantia, m.data_fim_garantia, m.uuid, strftime('%Y-%m-%dT%H:%M:%SZ', m.data_criacao) as data_criacao, c.nome as cliente_nome, c.id as cliente_id 
         FROM maquinas m 
         LEFT JOIN clientes c ON m.cliente_id = c.id
         ORDER BY m.id DESC
@@ -540,37 +608,41 @@ app.get('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
 });
 
 app.post('/api/maquinas', authenticateJWT, isAdmin, (req, res) => {
-    const { cliente_id } = req.body;
-    let { nome } = req.body;
+    const { cliente_id, data_instalacao, data_inicio_garantia, data_fim_garantia } = req.body;
+    let { marca, modelo, numero_serie } = req.body;
 
-    nome = sanitizeString(nome);
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    numero_serie = sanitizeString(numero_serie);
 
-    if (!cliente_id || !nome) return res.status(400).json({ error: "Cliente e Nome são obrigatórios" });
+    if (!cliente_id || !marca || !modelo) return res.status(400).json({ error: "Cliente, Marca e Modelo são obrigatórios" });
 
     const uuid = crypto.randomUUID();
 
-    db.run(`INSERT INTO maquinas (cliente_id, nome, uuid) VALUES (?, ?, ?)`,
-        [cliente_id, nome, uuid],
+    db.run(`INSERT INTO maquinas (cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, uuid],
         function (err) {
             if (err) return handleDBError(res, err);
-            res.status(201).json({ id: this.lastID, cliente_id, nome, uuid });
+            res.status(201).json({ id: this.lastID, cliente_id, marca, modelo, uuid });
         });
 });
 
 app.put('/api/maquinas/:id', authenticateJWT, isAdmin, (req, res) => {
     const { id } = req.params;
-    const { cliente_id } = req.body;
-    let { nome } = req.body;
+    const { cliente_id, data_instalacao, data_inicio_garantia, data_fim_garantia } = req.body;
+    let { marca, modelo, numero_serie } = req.body;
 
-    nome = sanitizeString(nome);
+    marca = sanitizeString(marca);
+    modelo = sanitizeString(modelo);
+    numero_serie = sanitizeString(numero_serie);
 
-    if (!cliente_id || !nome) return res.status(400).json({ error: "Cliente e Nome são obrigatórios" });
+    if (!cliente_id || !marca || !modelo) return res.status(400).json({ error: "Cliente, Marca e Modelo são obrigatórios" });
 
-    db.run(`UPDATE maquinas SET cliente_id = ?, nome = ? WHERE id = ?`,
-        [cliente_id, nome, id],
+    db.run(`UPDATE maquinas SET cliente_id = ?, marca = ?, modelo = ?, numero_serie = ?, data_instalacao = ?, data_inicio_garantia = ?, data_fim_garantia = ? WHERE id = ?`,
+        [cliente_id, marca, modelo, numero_serie, data_instalacao, data_inicio_garantia, data_fim_garantia, id],
         function (err) {
             if (err) return handleDBError(res, err);
-            res.json({ message: "Máquina atualizada com sucesso", id, cliente_id, nome });
+            res.json({ message: "Máquina atualizada com sucesso", id, cliente_id, marca, modelo });
         });
 });
 
@@ -631,14 +703,16 @@ app.post('/api/maquinas/gerar-qrcode', authenticateJWT, isAdmin, async (req, res
 
 app.get('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.estado_faturacao,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_pausa) as data_hora_pausa, 
                a.tecnico_id, a.notas,
                a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
                a.assinatura_cliente,
-               m.nome as maquina_nome, c.nome as cliente_nome, t.nome as tecnico_nome
+               COALESCE(m.marca || ' - ' || m.modelo, 'Máquina Removida') as maquina_nome, 
+               COALESCE(c.nome, 'Sem Cliente') as cliente_nome, 
+               COALESCE(t.nome, 'Não Atribuído') as tecnico_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
@@ -670,7 +744,7 @@ app.post('/api/avarias', authenticateJWT, isAdmin, (req, res) => {
     }
 
     // Verificar se a máquina existe
-    db.get(`SELECT nome, cliente_id FROM maquinas WHERE uuid = ?`, [maquina_id], (err, machine) => {
+    db.get(`SELECT (marca || ' - ' || modelo) as nome, cliente_id FROM maquinas WHERE uuid = ?`, [maquina_id], (err, machine) => {
         if (err) return handleDBError(res, err);
         if (!machine) return res.status(404).json({ error: "Máquina não encontrada" });
 
@@ -733,7 +807,7 @@ app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
 
         // Buscar detalhes da avaria para o e-mail
         const avariaQuery = `
-            SELECT m.nome as maquina_nome, c.nome as cliente_nome
+            SELECT (m.marca || ' - ' || m.modelo) as maquina_nome, c.nome as cliente_nome
             FROM avarias a
             LEFT JOIN maquinas m ON a.maquina_id = m.uuid
             LEFT JOIN clientes c ON m.cliente_id = c.id
@@ -746,7 +820,7 @@ app.put('/api/avarias/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
             db.run(`UPDATE avarias SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
                 if (err) return handleDBError(res, err);
                 securityLog('AVARIA_ATRIBUIDA', { avaria_id: id, tecnico_id });
-                
+
                 // Enviar notificação por e-mail
                 if (tecnico.email && avaria) {
                     sendAssignmentEmail(tecnico.email, tecnico.nome, avaria.maquina_nome, avaria.cliente_nome);
@@ -807,10 +881,12 @@ app.put('/api/avarias/:id/status', authenticateJWT, isAdminOrTecnico, (req, res)
 // Salvar rascunho de relatório
 app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
     const { id } = req.params;
-    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente } = req.body;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
     const techId = req.user.id;
 
     console.log(`[DEBUG] Salvando relatório para ID ${id}. Horas: ${horas_trabalho}`);
+    console.log(`[DEBUG] Assinatura Cliente (len): ${assinatura_cliente ? assinatura_cliente.length : 0}`);
+    console.log(`[DEBUG] Assinatura Técnico (len): ${assinatura_tecnico ? assinatura_tecnico.length : 0}`);
 
     // Verificar se o técnico é o responsável pela avaria e se não está submetido
     db.get(`SELECT tecnico_id, relatorio_submetido FROM avarias WHERE id = ?`, [id], (err, row) => {
@@ -821,15 +897,15 @@ app.put('/api/tecnico/avarias/:id/relatorio', authenticateJWT, isTecnico, (req, 
 
         const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
 
-        db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ? WHERE id = ?`, 
-            [relatorio, pecas_substituidas, horasNum, assinatura_cliente, id], function (err) {
-            if (err) {
-                console.error(`[DEBUG ERROR] Falha ao atualizar ID ${id}:`, err);
-                return handleDBError(res, err);
-            }
-            console.log(`[DEBUG] ID ${id} atualizado com sucesso. Horas gravadas: ${horasNum}`);
-            res.json({ message: "Rascunho salvo com sucesso" });
-        });
+        db.run(`UPDATE avarias SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
+            [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], function (err) {
+                if (err) {
+                    console.error(`[DEBUG ERROR] Falha ao atualizar ID ${id}:`, err);
+                    return handleDBError(res, err);
+                }
+                console.log(`[DEBUG] ID ${id} atualizado com sucesso. Horas gravadas: ${horasNum}`);
+                res.json({ message: "Rascunho salvo com sucesso" });
+            });
     });
 });
 
@@ -860,7 +936,7 @@ app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim,
-               m.nome as maquina_nome, m.uuid as maquina_uuid,
+               (m.marca || ' - ' || m.modelo) as maquina_nome, m.uuid as maquina_uuid,
                c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email,
                t.nome as tecnico_nome
         FROM avarias a
@@ -873,7 +949,13 @@ app.get('/api/avarias/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
     db.get(query, [id], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Intervenção não encontrada" });
-        res.json(row);
+        
+        // Buscar fotos
+        db.all(`SELECT id, caminho FROM fotos_relatorio WHERE avaria_id = ?`, [id], (err, fotos) => {
+            if (err) return handleDBError(res, err);
+            row.fotos = fotos || [];
+            res.json(row);
+        });
     });
 });
 
@@ -895,21 +977,314 @@ app.get('/api/estatisticas/avarias', authenticateJWT, isAdmin, (req, res) => {
 
 app.get('/api/historico/avarias', authenticateJWT, isAdmin, (req, res) => {
     const query = `
-        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, 
+        SELECT a.id, a.maquina_id, a.tipo_avaria, a.estado, a.estado_faturacao,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora) as data_hora, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim, 
                a.tecnico_id, a.notas,
                a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
-               m.nome as maquina_nome, m.uuid as maquina_uuid, 
-               c.nome as cliente_nome, c.id as cliente_id,
-               t.nome as tecnico_nome
+               COALESCE(m.marca || ' - ' || m.modelo, 'Máquina Removida') as maquina_nome, m.uuid as maquina_uuid, 
+               COALESCE(c.nome, 'Sem Cliente') as cliente_nome, c.id as cliente_id,
+               COALESCE(t.nome, 'Não Atribuído') as tecnico_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
         LEFT JOIN tecnicos t ON a.tecnico_id = t.id
         WHERE a.estado = 'resolvida'
         ORDER BY COALESCE(a.data_hora_fim, a.data_hora) DESC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+// Atualizar estado de faturação
+app.put('/api/avarias/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { estado_faturacao } = req.body;
+
+    const allowed = ['Por Faturar', 'Faturado', 'Oferta', 'Garantia'];
+    if (!allowed.includes(estado_faturacao)) {
+        return res.status(400).json({ error: "Estado de faturação inválido" });
+    }
+
+    db.run(`UPDATE avarias SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], function (err) {
+        if (err) return handleDBError(res, err);
+        securityLog('AVARIA_FATURACAO_CHANGED', { avaria_id: id, novo_estado: estado_faturacao });
+        res.json({ message: "Estado de faturação atualizado com sucesso", id, estado_faturacao });
+    });
+});
+
+// --- SERVIÇOS ROUTES ---
+
+app.get('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT s.*, 
+               COALESCE(c.nome, 'Sem Cliente') as cliente_nome, 
+               COALESCE(t.nome, 'Não Atribuído') as tecnico_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim
+        FROM servicos s
+        LEFT JOIN clientes c ON s.cliente_id = c.id
+        LEFT JOIN tecnicos t ON s.tecnico_id = t.id
+        WHERE s.arquivada = 0
+        ORDER BY s.data_hora DESC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.post('/api/servicos', authenticateJWT, isAdmin, (req, res) => {
+    const { cliente_id, tecnico_id, tipo_servico, tipo_camiao, notas } = req.body;
+
+    if (!cliente_id || !tipo_servico || !tipo_camiao) {
+        return res.status(400).json({ error: "Cliente, Tipo de Serviço e Tipo de Camião são obrigatórios" });
+    }
+
+    const query = `INSERT INTO servicos (cliente_id, tecnico_id, tipo_servico, tipo_camiao, notas) VALUES (?, ?, ?, ?, ?)`;
+    db.run(query, [cliente_id, tecnico_id || null, tipo_servico, tipo_camiao, notas], function (err) {
+        if (err) return handleDBError(res, err);
+        const serviceId = this.lastID;
+        securityLog('SERVICE_REPORTED_BY_ADMIN', { id: serviceId, cliente_id, tecnico_id });
+
+        if (tecnico_id) {
+            db.get(`SELECT nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+                db.get(`SELECT nome FROM clientes WHERE id = ?`, [cliente_id], (err, client) => {
+                    if (tech && tech.email) {
+                        sendAssignmentEmail(tech.email, tech.nome, `${tipo_servico} (${tipo_camiao})`, client ? client.nome : 'Cliente');
+                    }
+                });
+            });
+        }
+        res.status(201).json({ id: serviceId, message: "Serviço reportado com sucesso" });
+    });
+});
+
+app.put('/api/servicos/:id/atribuir', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { tecnico_id } = req.body;
+
+    db.get(`SELECT id, nome, email FROM tecnicos WHERE id = ?`, [tecnico_id], (err, tech) => {
+        if (!tech) return res.status(404).json({ error: "Técnico não encontrado" });
+
+        db.run(`UPDATE servicos SET tecnico_id = ? WHERE id = ?`, [tecnico_id, id], function (err) {
+            if (err) return handleDBError(res, err);
+            
+            db.get(`SELECT s.tipo_servico, s.tipo_camiao, c.nome as cliente_nome 
+                   FROM servicos s JOIN clientes c ON s.cliente_id = c.id 
+                   WHERE s.id = ?`, [id], (err, srv) => {
+                if (srv && tech.email) {
+                    sendAssignmentEmail(tech.email, tech.nome, `${srv.tipo_servico} (${srv.tipo_camiao})`, srv.cliente_nome);
+                }
+            });
+            res.json({ message: "Técnico atribuído" });
+        });
+    });
+});
+
+app.put('/api/servicos/:id/status', authenticateJWT, isAdminOrTecnico, (req, res) => {
+    const { id } = req.params;
+    const { estado, relatorio } = req.body;
+
+    if (!['pendente', 'em resolução', 'resolvida', 'pausada'].includes(estado)) {
+        return res.status(400).json({ error: "Estado inválido" });
+    }
+
+    let query;
+    let params = [estado];
+
+    if (estado === 'em resolução') {
+        query = `UPDATE servicos SET estado = ?, data_hora_inicio = COALESCE(data_hora_inicio, CURRENT_TIMESTAMP) WHERE id = ?`;
+        params.push(id);
+    } else if (estado === 'resolvida') {
+        query = `UPDATE servicos SET estado = ?, data_hora_fim = CURRENT_TIMESTAMP${relatorio ? ', relatorio = ?' : ''} WHERE id = ?`;
+        if (relatorio) params.push(relatorio);
+        params.push(id);
+    } else if (estado === 'pausada') {
+        query = `UPDATE servicos SET estado = ?, data_hora_pausa = CURRENT_TIMESTAMP${req.body.motivo_pausa ? ', relatorio = COALESCE(relatorio || \'\n\n\', \'\') || ?' : ''} WHERE id = ?`;
+        if (req.body.motivo_pausa) {
+            const stamp = `[Serviço Pausado em ${new Date().toLocaleString('pt-PT')}]: ${req.body.motivo_pausa}`;
+            params.push(stamp);
+        }
+        params.push(id);
+    } else {
+        query = `UPDATE servicos SET estado = ? WHERE id = ?`;
+        params.push(id);
+    }
+
+    db.run(query, params, function (err) {
+        if (err) return handleDBError(res, err);
+        securityLog('SERVICE_STATUS_CHANGED', { service_id: id, new_status: estado, user: req.user.id });
+        res.json({ message: "Estado atualizado", id, estado });
+    });
+});
+
+app.put('/api/servicos/:id/arquivar', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    db.run(`UPDATE servicos SET arquivada = 1 WHERE id = ?`, [id], (err) => {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Serviço arquivado" });
+    });
+});
+
+app.put('/api/servicos/:id/faturacao', authenticateJWT, isAdmin, (req, res) => {
+    const { id } = req.params;
+    const { estado_faturacao } = req.body;
+    db.run(`UPDATE servicos SET estado_faturacao = ? WHERE id = ?`, [estado_faturacao, id], (err) => {
+        if (err) return handleDBError(res, err);
+        res.json({ message: "Faturação atualizada" });
+    });
+});
+
+app.get('/api/tecnico/servicos', authenticateJWT, isTecnico, (req, res) => {
+    const techId = req.user.id;
+    const query = `
+        SELECT s.*, c.nome as cliente_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_pausa) as data_hora_pausa
+        FROM servicos s
+        JOIN clientes c ON s.cliente_id = c.id
+        WHERE s.tecnico_id = ? AND s.estado != 'resolvida' AND s.arquivada = 0
+        ORDER BY CASE WHEN s.estado = 'pausada' THEN 0 ELSE 1 END, s.data_hora DESC
+    `;
+    db.all(query, [techId], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/servicos/:id/detalhes-relatorio', authenticateJWT, (req, res) => {
+    const { id } = req.params;
+    const query = `
+        SELECT s.*, 
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_inicio) as data_hora_inicio,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim,
+               c.nome as cliente_nome, c.telefone as cliente_contato, c.email as cliente_email,
+               t.nome as tecnico_nome
+        FROM servicos s
+        LEFT JOIN clientes c ON s.cliente_id = c.id
+        LEFT JOIN tecnicos t ON s.tecnico_id = t.id
+        WHERE s.id = ?
+    `;
+    db.get(query, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
+        
+        // Buscar fotos
+        db.all(`SELECT id, caminho FROM fotos_relatorio WHERE servico_id = ?`, [id], (err, fotos) => {
+            if (err) return handleDBError(res, err);
+            row.fotos = fotos || [];
+            res.json(row);
+        });
+    });
+});
+
+app.put('/api/tecnico/servicos/:id/relatorio', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const { relatorio, pecas_substituidas, horas_trabalho, assinatura_cliente, assinatura_tecnico } = req.body;
+    const techId = req.user.id;
+
+    db.get(`SELECT tecnico_id, relatorio_submetido FROM servicos WHERE id = ?`, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Serviço não encontrado" });
+        if (row.tecnico_id !== techId) return res.status(403).json({ error: "Acesso negado" });
+        if (row.relatorio_submetido === 1) return res.status(400).json({ error: "Relatório já submetido" });
+
+        const horasNum = (horas_trabalho !== null && horas_trabalho !== '') ? parseFloat(String(horas_trabalho).replace(',', '.')) : null;
+
+        db.run(`UPDATE servicos SET relatorio = ?, pecas_substituidas = ?, horas_trabalho = ?, assinatura_cliente = ?, assinatura_tecnico = ? WHERE id = ?`,
+            [relatorio, pecas_substituidas, horasNum, assinatura_cliente, assinatura_tecnico, id], (err) => {
+                if (err) return handleDBError(res, err);
+                res.json({ message: "Rascunho de serviço salvo" });
+            });
+    });
+});
+
+app.post('/api/tecnico/servicos/:id/submeter-relatorio', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const techId = req.user.id;
+
+    db.run(`UPDATE servicos SET relatorio_submetido = 1 WHERE id = ? AND tecnico_id = ?`, [id, techId], function (err) {
+        if (err) return handleDBError(res, err);
+        securityLog('RELATORIO_SERVICO_SUBMETIDO', { service_id: id, tecnico_id: techId });
+        res.json({ message: "Relatório submetido" });
+    });
+});
+
+// --- Upload e Gestão de Fotos ---
+app.post('/api/tecnico/upload-fotos', authenticateJWT, isTecnico, upload.array('fotos', 10), (req, res) => {
+    const { avaria_id, servico_id } = req.body;
+    if (!avaria_id && !servico_id) {
+        return res.status(400).json({ error: "ID da avaria ou serviço é obrigatório" });
+    }
+
+    const id = avaria_id || servico_id;
+    const column = avaria_id ? 'avaria_id' : 'servico_id';
+    
+    // Inserir cada foto na base de dados
+    const stmt = db.prepare(`INSERT INTO fotos_relatorio (${column}, caminho) VALUES (?, ?)`);
+    const paths = [];
+    
+    req.files.forEach(file => {
+        const caminho = `/uploads/reports/${file.filename}`;
+        stmt.run(id, caminho);
+        paths.push(caminho);
+    });
+    
+    stmt.finalize((err) => {
+        if (err) return handleDBError(res, err);
+        securityLog('PHOTOS_UPLOADED', { id, count: req.files.length, type: avaria_id ? 'avaria' : 'servico' });
+        res.json({ message: "Fotos enviadas com sucesso", paths });
+    });
+});
+
+app.delete('/api/tecnico/fotos/:id', authenticateJWT, isTecnico, (req, res) => {
+    const { id } = req.params;
+    const techId = req.user.id;
+
+    const checkQuery = `
+        SELECT f.caminho, f.avaria_id, f.servico_id, a.tecnico_id as a_tech, s.tecnico_id as s_tech
+        FROM fotos_relatorio f
+        LEFT JOIN avarias a ON f.avaria_id = a.id
+        LEFT JOIN servicos s ON f.servico_id = s.id
+        WHERE f.id = ?
+    `;
+
+    db.get(checkQuery, [id], (err, row) => {
+        if (err) return handleDBError(res, err);
+        if (!row) return res.status(404).json({ error: "Foto não encontrada" });
+
+        const ownerId = row.a_tech || row.s_tech;
+        if (ownerId !== techId) return res.status(403).json({ error: "Acesso negado" });
+
+        db.run(`DELETE FROM fotos_relatorio WHERE id = ?`, [id], function (err) {
+            if (err) return handleDBError(res, err);
+            
+            const fullPath = path.join(__dirname, 'public', row.caminho);
+            fs.unlink(fullPath, (err) => {
+                if (err) console.error("Erro ao apagar ficheiro:", err);
+            });
+
+            securityLog('PHOTO_DELETED', { photo_id: id, path: row.caminho });
+            res.json({ message: "Foto removida" });
+        });
+    });
+});
+
+app.get('/api/historico/servicos', authenticateJWT, isAdmin, (req, res) => {
+    const query = `
+        SELECT s.*, c.nome as cliente_nome, t.nome as tecnico_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim
+        FROM servicos s
+        LEFT JOIN clientes c ON s.cliente_id = c.id
+        LEFT JOIN tecnicos t ON s.tecnico_id = t.id
+        WHERE s.estado = 'resolvida'
+        ORDER BY s.data_hora_fim DESC
     `;
     db.all(query, [], (err, rows) => {
         if (err) return handleDBError(res, err);
@@ -949,7 +1324,7 @@ app.post('/api/tecnicos', authenticateJWT, isAdmin, (req, res) => {
     }
 
     // 🔒 SEGURANÇA: Gerar palavra-passe simples (6 dígitos) pois será alterada
-    const generatedPassword = Math.floor(100000 + Math.random() * 900000).toString(); 
+    const generatedPassword = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPwd = bcrypt.hashSync(generatedPassword, 10);
 
     db.run(`INSERT INTO tecnicos (nome, especialidade, telefone, email, password) VALUES (?, ?, ?, ?, ?)`,
@@ -1026,7 +1401,7 @@ app.get('/api/tecnico/avarias', authenticateJWT, isTecnico, (req, res) => {
                a.notas,
                a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
                a.assinatura_cliente,
-               m.nome as maquina_nome, c.nome as cliente_nome
+               (m.marca || ' - ' || m.modelo) as maquina_nome, c.nome as cliente_nome
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
@@ -1047,13 +1422,31 @@ app.get('/api/tecnico/historico', authenticateJWT, isTecnico, (req, res) => {
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_inicio) as data_hora_inicio, 
                strftime('%Y-%m-%dT%H:%M:%SZ', a.data_hora_fim) as data_hora_fim,
                a.notas, a.relatorio, a.relatorio_submetido, a.pecas_substituidas, a.horas_trabalho,
-               m.nome as maquina_nome, m.uuid as maquina_uuid,
+               (m.marca || ' - ' || m.modelo) as maquina_nome, m.uuid as maquina_uuid,
                c.nome as cliente_nome, c.id as cliente_id
         FROM avarias a
         LEFT JOIN maquinas m ON a.maquina_id = m.uuid
         LEFT JOIN clientes c ON m.cliente_id = c.id
         WHERE a.tecnico_id = ? AND a.estado = 'resolvida'
         ORDER BY COALESCE(a.data_hora_fim, a.data_hora) DESC
+        LIMIT 50
+    `;
+    db.all(query, [techId], (err, rows) => {
+        if (err) return handleDBError(res, err);
+        res.json(rows);
+    });
+});
+
+app.get('/api/tecnico/servicos/historico', authenticateJWT, isTecnico, (req, res) => {
+    const techId = req.user.id;
+    const query = `
+        SELECT s.*, c.nome as cliente_nome,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora) as data_hora,
+               strftime('%Y-%m-%dT%H:%M:%SZ', s.data_hora_fim) as data_hora_fim
+        FROM servicos s
+        JOIN clientes c ON s.cliente_id = c.id
+        WHERE s.tecnico_id = ? AND s.estado = 'resolvida'
+        ORDER BY s.data_hora_fim DESC
         LIMIT 50
     `;
     db.all(query, [techId], (err, rows) => {
@@ -1099,7 +1492,7 @@ app.get('/api/public/maquinas/:uuid', (req, res) => {
         return res.status(400).json({ error: "UUID inválido" });
     }
 
-    db.get(`SELECT nome FROM maquinas WHERE uuid = ?`, [uuid], (err, row) => {
+    db.get(`SELECT (marca || ' - ' || modelo) as nome FROM maquinas WHERE uuid = ?`, [uuid], (err, row) => {
         if (err) return handleDBError(res, err);
         if (!row) return res.status(404).json({ error: "Máquina não encontrada" });
         res.json(row);
